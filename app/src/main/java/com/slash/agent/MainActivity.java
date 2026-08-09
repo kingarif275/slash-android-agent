@@ -44,17 +44,17 @@ public final class MainActivity extends Activity {
         View tipBackground = rounded(YELLOW, 10);
         add(design, tipBackground, 30, 137, 315, 93);
 
-        TextView tipDescription = text("You can use “Hey Google, slash this for me” to\ntrigger an agent", 15, Color.BLACK, Typeface.SERIF);
+        TextView tipDescription = text("You can use “Hey Google, slash this for me” to trigger an agent", 14, Color.BLACK, Typeface.SERIF);
         tipDescription.setGravity(Gravity.LEFT | Gravity.TOP);
         add(design, tipDescription, 40, 147, 295, 51);
 
-        TextView tips = text("Tips", 12, Color.BLACK, Typeface.DEFAULT_BOLD);
+        TextView tips = text("Tips", 10, Color.BLACK, Typeface.DEFAULT_BOLD);
         add(design, tips, 40, 208, 295, 12);
 
         tipDescription.bringToFront();
         tips.bringToFront();
 
-        add(design, text("Recent Activity", 12, WHITE, Typeface.DEFAULT_BOLD), 30, 290, 315, 12);
+        add(design, text("Recent Activity", 10, WHITE, Typeface.DEFAULT_BOLD), 30, 290, 315, 12);
 
         HorizontalScrollView activityViewport = new HorizontalScrollView(this);
         activityViewport.setHorizontalScrollBarEnabled(false);
@@ -63,7 +63,7 @@ public final class MainActivity extends Activity {
         cards.setOrientation(LinearLayout.HORIZONTAL);
         cards.setClipChildren(false);
         for (int i = 0; i < 3; i++) {
-            TextView card = text("Activity Title Here", 12, Color.BLACK, Typeface.DEFAULT_BOLD);
+            TextView card = text("Activity Title Here", 10, Color.BLACK, Typeface.DEFAULT_BOLD);
             card.setGravity(Gravity.LEFT | Gravity.BOTTOM);
             card.setPadding(10, 10, 10, 10);
             card.setBackground(roundedDrawable(YELLOW, 10));
@@ -72,7 +72,7 @@ public final class MainActivity extends Activity {
             cards.addView(card, cardParams);
         }
         activityViewport.addView(cards, new FrameLayout.LayoutParams(dp(414), dp(93)));
-        add(design, activityViewport, 30, 314, 315, 93);
+        add(design, activityViewport, 30, 314, 345, 93);
 
         root.post(() -> {
             float widthScale = root.getWidth() / (float) design.getWidth();
