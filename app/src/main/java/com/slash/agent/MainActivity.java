@@ -88,17 +88,18 @@ public final class MainActivity extends Activity {
             if (windowInsets != null) {
                 systemInsets = windowInsets.getInsets(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
             }
-            int usableWidth = root.getWidth() - systemInsets.left - systemInsets.right;
-            int usableHeight = root.getHeight() - systemInsets.top - systemInsets.bottom;
-            float widthScale = usableWidth / (float) design.getWidth();
-            float heightScale = usableHeight / (float) design.getHeight();
-            float scale = Math.min(widthScale, heightScale);
+            // The Figma frame contains a large empty lower area. Scaling the full
+            // 812dp frame to fit that empty area made every visible element too small.
+            // Keep the authored 1:1 size and only scale down on unusually narrow phones.
+            float contentWidth = dp(345);
+            float scale = Math.min(1f, (root.getWidth() - systemInsets.left - systemInsets.right) / contentWidth);
             design.setPivotX(0);
             design.setPivotY(0);
             design.setScaleX(scale);
             design.setScaleY(scale);
-            design.setTranslationX(systemInsets.left + (usableWidth - design.getWidth() * scale) / 2f);
-            design.setTranslationY(systemInsets.top);
+            design.setTranslationX(systemInsets.left);
+            // Figma's y=60 title position is already below the status bar on phones.
+            design.setTranslationY(0);
         });
 
         return root;
