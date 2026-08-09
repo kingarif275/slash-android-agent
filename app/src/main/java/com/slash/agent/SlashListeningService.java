@@ -7,6 +7,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
@@ -137,11 +138,11 @@ public final class SlashListeningService extends Service implements RecognitionL
 
     @Override public void onResults(Bundle results) {
         if (handled) return;
-        handled = true;
         ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         String command = matches == null || matches.isEmpty() ? "" : matches.get(0);
         String reply = execute(command);
-        speak(reply, false);
+        handled = false;
+        speak(reply, true);
     }
 
     private String execute(String command) {
@@ -154,18 +155,22 @@ public final class SlashListeningService extends Service implements RecognitionL
             startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return "Opening Settings.";
         }
-        if (normalized.startsWith("open ")) {
-            String target = normalized.substring(5).trim();
-            String packageName = packageFor(target);
-            if (packageName != null) {
-                Intent launch = getPackageManager().getLaunchIntentForPackage(packageName);
+        boolean launchRequested = normalized.contains("open ")
+                || normalized.contains("launch ")
+                || normalized.contains("start ")
+                || normalized.contains("play ");
+        if (launchRequested || normalized.equals("spotify") || normalized.equals("youtube")) {
+            ApplicationInfo app = findInstalledApp(normalized);
+            if (app != null) {
+                Intent launch = getPackageManager().getLaunchIntentForPackage(app.packageName);
                 if (launch != null) {
                     launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(launch);
-                    return "Opening " + target + ".";
+                    String label = getPackageManager().getApplicationLabel(app).toString();
+                    return "Opening " + label + ". Anything else?";
                 }
             }
-            return "I couldn't find " + target + " on this phone.";
+            return "I couldn't find that app on this phone. Try saying the app name again.";
         }
         if (normalized.contains("go home") || normalized.equals("home")) {
             if (SlashAccessibilityService.performGlobalActionSafe(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)) {
@@ -179,18 +184,32 @@ public final class SlashListeningService extends Service implements RecognitionL
             }
             return "I need Accessibility access enabled to go back for you.";
         }
-        return "I heard: " + command + ". I can execute more actions once Qwen is connected.";
+        return "I heard you say: " + command + ". I’m still listening—try an app name or say Settings, Home, or Back.";
     }
 
-    private String packageFor(String target) {
-        if (target.contains("youtube")) return "com.google.android.youtube";
-        if (target.contains("chrome")) return "com.android.chrome";
-        if (target.contains("whatsapp")) return "com.whatsapp";
-        if (target.contains("spotify")) return "com.spotify.music";
-        if (target.contains("telegram")) return "org.telegram.messenger";
-        if (target.contains("instagram")) return "com.instagram.android";
-        if (target.contains("camera")) return "com.android.camera2";
-        return null;
+    private ApplicationInfo findInstalledApp(String spokenCommand) {
+        String command = compact(spokenCommand);
+        ApplicationInfo best = null;
+        int bestScore = 0;
+        for (ApplicationInfo app : getPackageManager().getInstalledApplications(PackageManager.MATCH_ALL)) {
+            Intent launch = getPackageManager().getLaunchIntentForPackage(app.packageName);
+            if (launch == null) continue;
+            String label = compact(getPackageManager().getApplicationLabel(app).toString());
+            String packageName = compact(app.packageName);
+            int score = 0;
+            if (!label.isEmpty() && command.contains(label)) score = 100 + label.length();
+            else if (!label.isEmpty() && label.contains(command)) score = 80;
+            else if (command.contains(packageName)) score = 50;
+            if (score > bestScore) {
+                best = app;
+                bestScore = score;
+            }
+        }
+        return best;
+    }
+
+    private String compact(String value) {
+        return value.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", "");
     }
 
     private void stopSelfAfterReply() {
@@ -226,8 +245,8 @@ public final class SlashListeningService extends Service implements RecognitionL
     @Override public void onError(int error) {
         Log.e(TAG, "Speech recognition error: " + error);
         if (!handled) {
-            handled = true;
-            speak("I couldn't understand that. Please try again.", false);
+            handled = false;
+            speak("I didn't catch that. I'm still listening—please try again.", true);
         }
     }
 
