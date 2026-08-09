@@ -152,7 +152,7 @@ public final class SlashListeningService extends Service implements RecognitionL
         String normalized = command == null ? "" : command.toLowerCase(Locale.US).trim();
         if (normalized.isEmpty()) return "I missed that one, chief. Say it again—I’m still here.";
         if (normalized.contains("hello") || normalized.equals("hi") || normalized.contains("hey slash")) {
-            return "Hey there. I was beginning to wonder when you’d call. What’s the mission?";
+            return "Hey there. I was beginning to wonder when you’d call. How are you doing?";
         }
         if (normalized.contains("how are you") || normalized.contains("how are you doing")) {
             return "Fully charged, mildly opinionated, and ready to help. So, what’s on your mind?";
@@ -164,6 +164,23 @@ public final class SlashListeningService extends Service implements RecognitionL
         }
         if (normalized.contains("thank")) {
             return "Anytime, chief. I do enjoy being useful.";
+        }
+        if (normalized.contains("who are you") || normalized.contains("what are you")) {
+            return "I’m Slash—your curious little pocket companion. I can talk with you, open things, and carry out actions when you ask.";
+        }
+        if (normalized.contains("what can you do") || normalized.contains("help me")) {
+            return "I can open apps, navigate Settings, take you Home or Back, and keep you company. Give me a clear request and I’ll figure out the next move.";
+        }
+        if (normalized.contains("joke")) {
+            return "I tried to make a joke about Android permissions, but it needed your consent first. I’ll work on it.";
+        }
+        if (normalized.contains("open accessibility") || normalized.contains("accessibility settings")) {
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return "Opening Accessibility settings. Turn on Slash there and I’ll be able to handle Back and Home for you.";
+        }
+        if (normalized.contains("developer") || normalized.contains("developer options")) {
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return "Opening Developer options. Handle the dangerous buttons gently, chief.";
         }
         if (normalized.contains("open settings") || normalized.equals("settings")) {
             startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -214,6 +231,10 @@ public final class SlashListeningService extends Service implements RecognitionL
             if (!label.isEmpty() && command.contains(label)) score = 100 + label.length();
             else if (!label.isEmpty() && label.contains(command)) score = 80;
             else if (command.contains(packageName)) score = 50;
+            else if (command.contains("spotify") && packageName.contains("spotify")) score = 90;
+            else if (command.contains("whatsapp") && packageName.contains("whatsapp")) score = 90;
+            else if (command.contains("telegram") && packageName.contains("telegram")) score = 90;
+            else if (command.contains("youtube") && packageName.contains("youtube")) score = 90;
             if (score > bestScore) {
                 best = app;
                 bestScore = score;
