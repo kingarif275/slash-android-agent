@@ -2,12 +2,14 @@ package com.slash.agent;
 
 import android.app.Activity;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -41,7 +43,7 @@ public final class MainActivity extends Activity {
         root.addView(design, new FrameLayout.LayoutParams(dp(375), dp(812)));
 
         // Coordinates intentionally mirror the 375x812 Figma frame.
-        add(design, text("Slash", 24, WHITE, ntype82), 30, 60, 167, 21);
+        add(design, text("Slash", 24, WHITE, ntype82), 30, 60, 167, 32);
 
         View settings = new View(this);
         settings.setBackgroundColor(Color.LTGRAY);
@@ -81,12 +83,22 @@ public final class MainActivity extends Activity {
         add(design, activityViewport, 30, 314, 345, 93);
 
         root.post(() -> {
-            float widthScale = root.getWidth() / (float) design.getWidth();
-            float heightScale = root.getHeight() / (float) design.getHeight();
+            Insets systemInsets = Insets.NONE;
+            WindowInsets windowInsets = root.getRootWindowInsets();
+            if (windowInsets != null) {
+                systemInsets = windowInsets.getInsets(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+            }
+            int usableWidth = root.getWidth() - systemInsets.left - systemInsets.right;
+            int usableHeight = root.getHeight() - systemInsets.top - systemInsets.bottom;
+            float widthScale = usableWidth / (float) design.getWidth();
+            float heightScale = usableHeight / (float) design.getHeight();
             float scale = Math.min(widthScale, heightScale);
+            design.setPivotX(0);
+            design.setPivotY(0);
             design.setScaleX(scale);
             design.setScaleY(scale);
-            design.setTranslationX((root.getWidth() - design.getWidth() * scale) / 2f);
+            design.setTranslationX(systemInsets.left + (usableWidth - design.getWidth() * scale) / 2f);
+            design.setTranslationY(systemInsets.top);
         });
 
         return root;
