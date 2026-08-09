@@ -1,6 +1,6 @@
 # Slash Android Agent
 
-Slash is a Nothing Phone (2) prototype with the Figma home screen preserved as a Recent Activity viewer. The Quick Settings tile starts a foreground listening service. The model and action layer are intentionally isolated so the local Qwen runtime can be swapped without changing the UI.
+Slash is a Nothing Phone (2) prototype with the Figma home screen preserved as a Recent Activity viewer. The Quick Settings tile starts a foreground listening service. Natural language is handled by a local OpenAI-compatible Qwen endpoint; Android capabilities are deterministic tools and Accessibility provides screen context and interaction.
 
 ## Current model decision
 
@@ -18,4 +18,10 @@ Install with Android SDK platform-tools:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-After installation, add Slash to Quick Settings and enable the AccessibilityService in Android Settings. The Qwen GGUF and Moonshine assets are not bundled into the APK; they will be downloaded/pushed in the next integration step to keep the initial APK small.
+After installation, add Slash to Quick Settings and enable the AccessibilityService in Android Settings. Run a local Qwen server on the phone exposing:
+
+```text
+http://127.0.0.1:8080/v1/chat/completions
+```
+
+The APK does not bundle the Qwen GGUF or runtime yet; until that endpoint is running, Slash reports that its local model is unavailable rather than using hardcoded phrase parsing.
