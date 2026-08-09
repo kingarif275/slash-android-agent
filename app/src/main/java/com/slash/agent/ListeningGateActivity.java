@@ -17,6 +17,8 @@ public final class ListeningGateActivity extends Activity {
             Intent service = new Intent(this, SlashListeningService.class)
                     .setAction(SlashListeningService.START);
             startForegroundService(service);
+            startActivity(new Intent(this, EdgeGlowActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP));
         }
         getWindow().getDecorView().postDelayed(this::finish, 350);
     }
