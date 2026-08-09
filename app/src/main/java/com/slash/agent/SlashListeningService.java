@@ -10,7 +10,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.provider.Settings;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -33,6 +35,7 @@ public final class SlashListeningService extends Service implements RecognitionL
     private TextToSpeech speaker;
     private boolean speaking;
     private boolean handled;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     @Override public int onStartCommand(Intent intent, int flags, int id) {
         if (STOP.equals(intent == null ? null : intent.getAction())) {
@@ -105,11 +108,18 @@ public final class SlashListeningService extends Service implements RecognitionL
         speaker.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
             @Override public void onStart(String id) { }
             @Override public void onDone(String id) {
-                speaking = false;
-                if (listenAfter) beginListening();
-                else stopSelfAfterReply();
+                mainHandler.post(() -> {
+                    speaking = false;
+                    if (listenAfter) beginListening();
+                    else stopSelfAfterReply();
+                });
             }
-            @Override public void onError(String id) { speaking = false; if (listenAfter) beginListening(); else stopSelfAfterReply(); }
+            @Override public void onError(String id) {
+                mainHandler.post(() -> {
+                    speaking = false;
+                    if (listenAfter) beginListening(); else stopSelfAfterReply();
+                });
+            }
         });
         speaker.speak(message, TextToSpeech.QUEUE_FLUSH, params, "slash");
     }
@@ -214,6 +224,7 @@ public final class SlashListeningService extends Service implements RecognitionL
     @Override public void onPartialResults(Bundle partialResults) { }
     @Override public void onEvent(int eventType, Bundle params) { }
     @Override public void onError(int error) {
+        Log.e(TAG, "Speech recognition error: " + error);
         if (!handled) {
             handled = true;
             speak("I couldn't understand that. Please try again.", false);
