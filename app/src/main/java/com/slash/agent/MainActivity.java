@@ -1,12 +1,14 @@
 package com.slash.agent;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -18,67 +20,91 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        getWindow().setStatusBarColor(BLACK);
-        getWindow().setNavigationBarColor(BLACK);
+        Window window = getWindow();
+        window.setStatusBarColor(BLACK);
+        window.setNavigationBarColor(BLACK);
+        window.setDecorFitsSystemWindows(false);
         setContentView(buildHome());
     }
 
     private View buildHome() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(30, 0, 0, 0);
+        FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(BLACK);
 
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView title = text("Slash", 24, WHITE, Typeface.SERIF);
-        header.addView(title, new LinearLayout.LayoutParams(0, 81, 1));
-        TextView settings = text("", 1, Color.LTGRAY, Typeface.DEFAULT);
+        // Coordinates intentionally mirror the 375x812 Figma frame.
+        add(root, text("Slash", 24, WHITE, Typeface.SERIF), 30, 60, 167, 21);
+
+        View settings = new View(this);
         settings.setBackgroundColor(Color.LTGRAY);
-        LinearLayout.LayoutParams gear = new LinearLayout.LayoutParams(21, 21);
-        gear.rightMargin = 30;
-        header.addView(settings, gear);
-        root.addView(header);
+        add(root, settings, 324, 60, 21, 21);
 
-        LinearLayout tip = new LinearLayout(this);
-        tip.setOrientation(LinearLayout.VERTICAL);
-        tip.setPadding(10, 10, 10, 10);
-        tip.setBackgroundColor(YELLOW);
-        TextView tipDesc = text("You can use “Hey Google, slash this for me” to\ntrigger an agent", 15, Color.BLACK, Typeface.SERIF);
-        tip.addView(tipDesc, new LinearLayout.LayoutParams(-1, 0, 1));
-        tip.addView(text("Tips", 12, Color.BLACK, Typeface.DEFAULT_BOLD));
-        LinearLayout.LayoutParams tipLp = new LinearLayout.LayoutParams(315, 93);
-        tipLp.bottomMargin = 57;
-        root.addView(tip, tipLp);
+        View tipBackground = rounded(YELLOW, 10);
+        add(root, tipBackground, 30, 137, 315, 93);
 
-        root.addView(text("Recent Activity", 12, WHITE, Typeface.DEFAULT_BOLD), new LinearLayout.LayoutParams(315, 24));
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
+        TextView tipDescription = text("You can use “Hey Google, slash this for me” to\ntrigger an agent", 15, Color.BLACK, Typeface.SERIF);
+        tipDescription.setGravity(Gravity.LEFT | Gravity.TOP);
+        add(root, tipDescription, 40, 147, 295, 51);
+
+        TextView tips = text("Tips", 12, Color.BLACK, Typeface.DEFAULT_BOLD);
+        add(root, tips, 40, 208, 295, 12);
+
+        tipDescription.bringToFront();
+        tips.bringToFront();
+
+        add(root, text("Recent Activity", 12, WHITE, Typeface.DEFAULT_BOLD), 30, 290, 315, 12);
+
+        HorizontalScrollView activityViewport = new HorizontalScrollView(this);
+        activityViewport.setHorizontalScrollBarEnabled(false);
+        activityViewport.setClipChildren(true);
         LinearLayout cards = new LinearLayout(this);
         cards.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < 3; i++) cards.addView(card());
-        scroll.addView(cards);
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 93));
+        cards.setClipChildren(false);
+        for (int i = 0; i < 3; i++) {
+            TextView card = text("Activity Title Here", 12, Color.BLACK, Typeface.DEFAULT_BOLD);
+            card.setGravity(Gravity.LEFT | Gravity.BOTTOM);
+            card.setPadding(10, 10, 10, 10);
+            card.setBackground(roundedDrawable(YELLOW, 10));
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(dp(130), dp(93));
+            cardParams.rightMargin = dp(12);
+            cards.addView(card, cardParams);
+        }
+        activityViewport.addView(cards, new FrameLayout.LayoutParams(dp(414), dp(93)));
+        add(root, activityViewport, 30, 314, 315, 93);
+
         return root;
     }
 
-    private View card() {
-        TextView card = text("Activity Title Here", 12, Color.BLACK, Typeface.DEFAULT_BOLD);
-        card.setGravity(Gravity.BOTTOM | Gravity.LEFT);
-        card.setPadding(10, 10, 10, 10);
-        card.setBackgroundColor(YELLOW);
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(130, 93);
-        p.rightMargin = 12;
-        card.setLayoutParams(p);
-        return card;
+    private void add(FrameLayout parent, View child, int x, int y, int width, int height) {
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(dp(width), dp(height));
+        params.leftMargin = dp(x);
+        params.topMargin = dp(y);
+        parent.addView(child, params);
     }
 
     private TextView text(String value, float size, int color, Typeface face) {
-        TextView v = new TextView(this);
-        v.setText(value);
-        v.setTextSize(size);
-        v.setTextColor(color);
-        v.setTypeface(face);
-        return v;
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setTypeface(face);
+        view.setIncludeFontPadding(false);
+        return view;
+    }
+
+    private View rounded(int color, int radius) {
+        View view = new View(this);
+        view.setBackground(roundedDrawable(color, radius));
+        return view;
+    }
+
+    private GradientDrawable roundedDrawable(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radius));
+        return drawable;
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 }
