@@ -23,6 +23,7 @@ import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.Calendar;
 
 public final class SlashListeningService extends Service implements RecognitionListener {
     public static final String START = "com.slash.agent.START";
@@ -91,7 +92,7 @@ public final class SlashListeningService extends Service implements RecognitionL
         speaker = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS) {
                 speaker.setLanguage(Locale.US);
-                speak("Hi, I'm Slash. What can I do for you?", true);
+                speak("Hello, chief. Slash is online and listening. What shall we get done?", true);
             } else {
                 beginListening();
             }
@@ -141,15 +142,28 @@ public final class SlashListeningService extends Service implements RecognitionL
         ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         String command = matches == null || matches.isEmpty() ? "" : matches.get(0);
         String reply = execute(command);
+        Log.i(TAG, "VOICE_IN: " + command);
+        Log.i(TAG, "VOICE_OUT: " + reply);
         handled = false;
         speak(reply, true);
     }
 
     private String execute(String command) {
         String normalized = command == null ? "" : command.toLowerCase(Locale.US).trim();
-        if (normalized.isEmpty()) return "I didn't catch that. Try again when you press Slash.";
+        if (normalized.isEmpty()) return "I missed that one, chief. Say it again—I’m still here.";
         if (normalized.contains("hello") || normalized.equals("hi") || normalized.contains("hey slash")) {
-            return "Hey there. I'm ready.";
+            return "Hey there. I was beginning to wonder when you’d call. What’s the mission?";
+        }
+        if (normalized.contains("how are you") || normalized.contains("how are you doing")) {
+            return "Fully charged, mildly opinionated, and ready to help. So, what’s on your mind?";
+        }
+        if (normalized.contains("what time") || normalized.equals("time")) {
+            Calendar now = Calendar.getInstance();
+            return String.format(Locale.US, "It’s %d:%02d. Time is behaving itself for now.",
+                    now.get(Calendar.HOUR), now.get(Calendar.MINUTE));
+        }
+        if (normalized.contains("thank")) {
+            return "Anytime, chief. I do enjoy being useful.";
         }
         if (normalized.contains("open settings") || normalized.equals("settings")) {
             startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -167,24 +181,24 @@ public final class SlashListeningService extends Service implements RecognitionL
                     launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     startActivity(launch);
                     String label = getPackageManager().getApplicationLabel(app).toString();
-                    return "Opening " + label + ". Anything else?";
+                    return "On it—opening " + label + ". I’ll remain on standby when you’re ready.";
                 }
             }
             return "I couldn't find that app on this phone. Try saying the app name again.";
         }
         if (normalized.contains("go home") || normalized.equals("home")) {
             if (SlashAccessibilityService.performGlobalActionSafe(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)) {
-                return "Going home.";
+                return "Taking you home. Try not to cause too much trouble out there.";
             }
             return "I need Accessibility access enabled to go Home for you.";
         }
         if (normalized.equals("back") || normalized.contains("go back")) {
             if (SlashAccessibilityService.performGlobalActionSafe(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)) {
-                return "Going back.";
+            return "Going back one step. Consider it handled.";
             }
             return "I need Accessibility access enabled to go back for you.";
         }
-        return "I heard you say: " + command + ". I’m still listening—try an app name or say Settings, Home, or Back.";
+        return "I heard you say: " + command + ". I’m not quite sure what you want me to do with that yet, but I’m listening. Try an app, Settings, Home, or Back.";
     }
 
     private ApplicationInfo findInstalledApp(String spokenCommand) {
@@ -246,7 +260,9 @@ public final class SlashListeningService extends Service implements RecognitionL
         Log.e(TAG, "Speech recognition error: " + error);
         if (!handled) {
             handled = false;
-            speak("I didn't catch that. I'm still listening—please try again.", true);
+            String message = "I didn’t quite catch that, chief. Give me another shot.";
+            Log.i(TAG, "VOICE_OUT: " + message + " (recognition error " + error + ")");
+            speak(message, true);
         }
     }
 
