@@ -47,6 +47,7 @@ public final class MainActivity extends Activity {
 
         View settings = new View(this);
         settings.setBackgroundColor(Color.LTGRAY);
+        settings.setOnClickListener(view -> startActivity(new android.content.Intent(this, ModelSetupActivity.class)));
         add(design, settings, 324, 60, 21, 21);
 
         View tipBackground = rounded(YELLOW, 10);

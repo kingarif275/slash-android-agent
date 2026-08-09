@@ -37,7 +37,8 @@ public final class SlashListeningService extends Service implements RecognitionL
     private final JSONArray history = new JSONArray();
     private SpeechRecognizer recognizer;
     private TextToSpeech speaker;
-    private SlashModelClient model;
+    private LlmRuntime model;
+    private EmbeddedLlamaRuntime embeddedRuntime;
     private SlashToolExecutor executor;
     private boolean handled;
 
@@ -50,10 +51,18 @@ public final class SlashListeningService extends Service implements RecognitionL
         }
         try {
             startForegroundNow();
-            model = new SlashModelClient();
+            embeddedRuntime = new EmbeddedLlamaRuntime(this);
+            model = embeddedRuntime;
             executor = new SlashToolExecutor(this);
             history.put(new JSONObject().put("role", "system").put("content", systemPrompt()));
-            startInteraction();
+            model.loadModel((error, ignoredTool) -> {
+                if (error != null) {
+                    Log.e(TAG, "MODEL_ERROR: " + error);
+                    speak(error, false);
+                } else {
+                    startInteraction();
+                }
+            });
         } catch (Throwable error) {
             Log.e(TAG, "SYSTEM_ERROR: unable to start agent", error);
             stopInteraction(); hideGlow(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
@@ -106,7 +115,7 @@ public final class SlashListeningService extends Service implements RecognitionL
                     + "\nCURRENT_SCREEN_CONTEXT:\n" + SlashAccessibilityService.readScreenSafe());
             history.put(message);
             trimHistory();
-            model.complete(history, this::handleModelResult);
+            model.generate(history, this::handleModelResult);
         } catch (Exception error) {
             speak("The agent could not prepare that request.", true);
         }
@@ -121,7 +130,7 @@ public final class SlashListeningService extends Service implements RecognitionL
             try {
                 history.put(new JSONObject().put("role", "system").put("content", "REAL_EXECUTOR_RESULT: " + result.result));
                 trimHistory();
-                model.complete(history, this::handleModelResult);
+                model.generate(history, this::handleModelResult);
             } catch (Exception error) { speak("The action returned an unreadable result.", true); }
             return;
         }
@@ -146,7 +155,12 @@ public final class SlashListeningService extends Service implements RecognitionL
 
     private void trimHistory() { while (history.length() > 14) history.remove(1); }
     private void finishInteraction() { stopInteraction(); hideGlow(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); }
-    private void stopInteraction() { if (recognizer != null) { recognizer.cancel(); recognizer.destroy(); recognizer = null; } if (speaker != null) { speaker.stop(); speaker.shutdown(); speaker = null; } if (model != null) { model.shutdown(); model = null; } }
+    private void stopInteraction() {
+        if (recognizer != null) { recognizer.cancel(); recognizer.destroy(); recognizer = null; }
+        if (speaker != null) { speaker.stop(); speaker.shutdown(); speaker = null; }
+        if (model != null) { model.unload(); model = null; }
+        if (embeddedRuntime != null) { embeddedRuntime.modelManager().shutdown(); embeddedRuntime = null; }
+    }
     private void hideGlow() { sendBroadcast(new Intent(HIDE_GLOW).setPackage(getPackageName())); }
 
     @Override public void onResults(Bundle results) {
