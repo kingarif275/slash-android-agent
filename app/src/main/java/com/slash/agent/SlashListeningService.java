@@ -174,6 +174,27 @@ public final class SlashListeningService extends Service implements RecognitionL
         if (normalized.contains("joke")) {
             return "I tried to make a joke about Android permissions, but it needed your consent first. I’ll work on it.";
         }
+        if (normalized.contains("read my screen") || normalized.contains("what is on my screen")
+                || normalized.contains("what am i looking at")) {
+            return SlashAccessibilityService.readScreenSafe();
+        }
+        if (normalized.contains("click search") || normalized.contains("tap search")) {
+            return SlashAccessibilityService.clickTextSafe("search")
+                    ? "I found the Search control and tapped it. What would you like to look for?"
+                    : "I can’t find a Search control on the current screen. Open the app you want me to use first.";
+        }
+        if (normalized.contains("click liked songs") || normalized.contains("open liked songs")) {
+            return SlashAccessibilityService.clickTextSafe("liked songs")
+                    ? "Opening your Liked Songs. I’ll stay with you."
+                    : "I can’t see Liked Songs on the current screen yet. Open Spotify and I’ll look again.";
+        }
+        if (normalized.startsWith("search the web for ") || normalized.startsWith("search online for ")) {
+            String query = normalized.replaceFirst("^search (the web|online) for ", "").trim();
+            Intent search = new Intent(Intent.ACTION_WEB_SEARCH).putExtra("query", query)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(search);
+            return "I’m opening a web search for " + query + ".";
+        }
         if (normalized.contains("open accessibility") || normalized.contains("accessibility settings")) {
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             return "Opening Accessibility settings. Turn on Slash there and I’ll be able to handle Back and Home for you.";
