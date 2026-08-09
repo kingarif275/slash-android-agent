@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Slash</string>
+    <string name="accessibility_description">Slash uses accessibility only to carry out actions you request.</string>
+</resources>
