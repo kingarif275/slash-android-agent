@@ -25,18 +25,24 @@ public final class LocalModelManager {
     private static final long GIB = 1024L * 1024L * 1024L;
 
     public static final ModelProfile LITE = new ModelProfile(
-            "qwen3-0.6b-q8_0", "Lite · Qwen3 0.6B Q8", "Qwen3-0.6B-Q8_0.gguf",
-            "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf?download=true",
+            "qwen3-0.6b-q4_k_m", "Lite · Qwen3 0.6B Q4_K_M", "Qwen_Qwen3-0.6B-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen_Qwen3-0.6B-Q4_K_M.gguf?download=true",
             "qwen3", 32768, "qwen3", ModelProfile.ToolSupport.QWEN_NATIVE_EXPECTED,
-            ModelProfile.Tier.LITE, 500_000_000L, 4L * GIB);
+            ModelProfile.Tier.LITE, 450_000_000L, 4L * GIB);
 
     public static final ModelProfile BALANCED = new ModelProfile(
-            "qwen3-1.7b-q4_k_m", "Balanced · Qwen3 1.7B Q4_K_M", "Qwen3-1.7B-Q4_K_M.gguf",
-            "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
+            "qwen3-1.7b-q4_k_m", "Balanced · Qwen3 1.7B Q4_K_M", "Qwen_Qwen3-1.7B-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/Qwen_Qwen3-1.7B-GGUF/resolve/main/Qwen_Qwen3-1.7B-Q4_K_M.gguf?download=true",
             "qwen3", 32768, "qwen3", ModelProfile.ToolSupport.QWEN_NATIVE_EXPECTED,
-            ModelProfile.Tier.BALANCED, 900_000_000L, 6L * GIB);
+            ModelProfile.Tier.BALANCED, 1_200_000_000L, 6L * GIB);
 
-    private static final List<ModelProfile> PROFILES = Collections.unmodifiableList(Arrays.asList(LITE, BALANCED));
+    public static final ModelProfile HIGH = new ModelProfile(
+            "qwen3-4b-q4_k_m", "High · Qwen3 4B Q4_K_M", "Qwen_Qwen3-4B-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/Qwen_Qwen3-4B-GGUF/resolve/main/Qwen_Qwen3-4B-Q4_K_M.gguf?download=true",
+            "qwen3", 32768, "qwen3", ModelProfile.ToolSupport.QWEN_NATIVE_EXPECTED,
+            ModelProfile.Tier.HIGH, 2_400_000_000L, 8L * GIB);
+
+    private static final List<ModelProfile> PROFILES = Collections.unmodifiableList(Arrays.asList(LITE, BALANCED, HIGH));
     private final Context context;
     private final SharedPreferences preferences;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();

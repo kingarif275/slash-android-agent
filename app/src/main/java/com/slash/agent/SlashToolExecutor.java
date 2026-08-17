@@ -3,8 +3,8 @@ package com.slash.agent;
 import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 
 import org.json.JSONObject;
 
@@ -22,12 +22,17 @@ public final class SlashToolExecutor {
 
     public Result execute(String tool, JSONObject args) {
         try {
+            tool = ToolArgumentNormalizer.toolName(tool);
+            args = ToolArgumentNormalizer.normalize(tool, args);
+            String validation = ToolArgumentNormalizer.validate(tool, args);
+            if (validation != null) return new Result(false, "INVALID_TOOL_ARGUMENTS: " + validation);
             switch (tool) {
                 case "OPEN_APP": return openApp(args.optString("app_query"));
-                case "CLICK_ELEMENT": return click(args.optString("target_description"));
-                case "READ_SCREEN": return new Result(true, SlashAccessibilityService.readScreenSafe());
-                case "GET_SCREEN_STATE": return new Result(true, SlashAccessibilityService.readScreenSafe());
-                case "TYPE_TEXT": return new Result(SlashAccessibilityService.typeTextSafe(args.optString("text")), "Text input action completed.");
+                case "CLICK_ELEMENT": return click(args);
+                case "OBSERVE_SCREEN":
+                case "READ_SCREEN":
+                case "GET_SCREEN_STATE": return new Result(true, SlashAccessibilityService.observeScreenSafe());
+                case "TYPE_TEXT": return type(args);
                 case "SCROLL": return new Result(SlashAccessibilityService.scrollSafe(args.optString("direction")), "Scroll action completed.");
                 case "BACK": return new Result(SlashAccessibilityService.performGlobalActionSafe(AccessibilityService.GLOBAL_ACTION_BACK), "Back action completed.");
                 case "HOME": return new Result(SlashAccessibilityService.performGlobalActionSafe(AccessibilityService.GLOBAL_ACTION_HOME), "Home action completed.");
@@ -37,28 +42,41 @@ public final class SlashToolExecutor {
     }
 
     private Result openApp(String query) {
-        ApplicationInfo best = null;
+        ResolveInfo best = null;
         String wanted = compact(query);
         int score = 0;
         PackageManager pm = context.getPackageManager();
-        for (ApplicationInfo app : pm.getInstalledApplications(PackageManager.MATCH_ALL)) {
-            if (pm.getLaunchIntentForPackage(app.packageName) == null) continue;
-            String label = compact(pm.getApplicationLabel(app).toString());
-            String packageName = compact(app.packageName);
+        Intent launcherQuery = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        for (ResolveInfo app : pm.queryIntentActivities(launcherQuery, PackageManager.MATCH_ALL)) {
+            String packageId = app.activityInfo.packageName;
+            String label = compact(app.loadLabel(pm).toString());
+            String packageName = compact(packageId);
             int candidate = label.equals(wanted) ? 100 : label.contains(wanted) ? 80 : wanted.contains(label) ? 70 : 0;
             if (candidate == 0 && !wanted.isEmpty() && packageName.contains(wanted)) candidate = 60;
             if (candidate > score) { best = app; score = candidate; }
         }
         if (best == null) return new Result(false, "APP_NOT_FOUND: " + query);
-        Intent launch = pm.getLaunchIntentForPackage(best.packageName);
+        Intent launch = pm.getLaunchIntentForPackage(best.activityInfo.packageName);
+        if (launch == null) return new Result(false, "APP_NOT_LAUNCHABLE: " + query);
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(launch);
-        return new Result(true, "OPENED_APP: " + pm.getApplicationLabel(best));
+        return new Result(true, "OPENED_APP: " + best.loadLabel(pm));
     }
 
-    private Result click(String description) {
-        boolean success = SlashAccessibilityService.clickTextSafe(description);
-        return new Result(success, success ? "CLICKED_ELEMENT: " + description : "ELEMENT_NOT_FOUND: " + description);
+    private Result click(JSONObject args) {
+        String observationId = args.optString("observation_id");
+        String elementId = args.optString("element_id");
+        boolean success = SlashAccessibilityService.clickElementSafe(observationId, elementId);
+        String target = observationId + "/" + elementId;
+        return new Result(success, success ? "CLICKED_ELEMENT: " + target : "ELEMENT_NOT_FOUND_OR_STALE: " + target);
+    }
+
+    private Result type(JSONObject args) {
+        String observationId = args.optString("observation_id");
+        String elementId = args.optString("element_id");
+        String text = args.optString("text");
+        boolean success = SlashAccessibilityService.typeElementSafe(observationId, elementId, text);
+        return new Result(success, success ? "TEXT_ENTERED" : "TEXT_TARGET_NOT_FOUND_OR_STALE");
     }
 
     private String compact(String value) { return value.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", ""); }

@@ -11,12 +11,12 @@ MainActivity composer (TEXT or VOICE)
   -> normal streamed chat response
      or AgentTaskController
        -> SlashToolExecutor
-       -> SlashAccessibilityService
+       -> SlashAccessibilityService / ScreenPerceptionReducer
        -> observe / act / verify / replan
   -> SQLite chats, messages, progress, and local memory
 ```
 
-The application-scoped coordinator owns the warmed `EmbeddedLlamaRuntime`, so inference and an active agent task are not tied to the chat Activity lifecycle. A new text or voice turn invalidates an older task token and steers the conversation from current state.
+The application-scoped coordinator owns the warmed `EmbeddedLlamaRuntime`. `SlashRuntimeService` keeps user-initiated inference and an active agent task alive when the target app covers the chat Activity. A new text or voice turn invalidates an older task token and steers the conversation from current state.
 
 The Quick Settings tile is optional. It opens the same chat composer in voice-input state; chat, agent work, history, memory, and screen control do not depend on it.
 
@@ -38,16 +38,21 @@ Only recent chat messages and a small lexical retrieval of relevant memories ent
 
 The model screen currently offers:
 
-- Lite: Qwen3 0.6B Q8_0
+- Lite: Qwen3 0.6B Q4_K_M
 - Balanced: Qwen3 1.7B Q4_K_M
+- High: Qwen3 4B Q4_K_M
 
 The selected `ModelProfile` records architecture, context length, chat template, expected tool compatibility, tier, and resource requirements. Downloads are stored under Slash's private `files/models/` directory and checked for minimum size plus the GGUF header before activation.
 
-## Important runtime limitation
+## Reconstructed native runtime
 
-`LlmRuntime` and `EmbeddedLlamaRuntime` are present, but this repository does **not** contain the `slash_llama` JNI implementation, llama.cpp native sources/libraries, native token streaming, KV/prefix-cache code, or a packaged GGUF. Until that native library is added, the UI, persistent chats, history, voice transcription, and model setup work, while model replies and agent execution report that local inference is unavailable.
+The official llama.cpp repository is pinned as a Git submodule under `app/src/main/cpp/llama.cpp`. CMake builds `libslash_llama.so` for arm64-v8a. The JNI bridge loads GGUF models, chunks prompt prefill to `n_batch`, streams raw UTF-8 token bytes, supports cancellation, and reuses the longest valid KV/prefix cache across turns. It logs prompt totals, prefix matches, reused/new tokens, and prefill timing.
 
-The repository also does not currently contain a Chatterbox Nano voice runtime. The legacy, now-unwired voice service used Android `TextToSpeech`; the chat composer uses Android speech recognition for voice input and does not force spoken output for typed turns.
+## Neural voice
+
+Voice turns use `ChatterboxNanoVoiceRuntime` when its separately downloaded model and speaker reference are ready. It runs the published four-graph ONNX pipeline (embedding, reference encoder, autoregressive language model with a 12-layer KV cache, and conditional decoder), then plays 24 kHz mono PCM. The local-model screen verifies every artifact against its published SHA-256 and imports a private 16-bit PCM WAV speaker reference. Android `TextToSpeech` is used only if neural synthesis fails. Typed turns remain text-only.
+
+The Chatterbox package is a community ONNX conversion of ResembleAI Chatterbox Nano, not an official Android release; its model files are intentionally not committed to Git. The UI identifies the download size and readiness state before voice mode uses it.
 
 ## Build
 
@@ -56,6 +61,8 @@ The project requires JDK 17 and Android SDK 35:
 ```powershell
 .\gradlew.bat test assembleDebug
 ```
+
+Clone with submodules (or run `git submodule update --init --recursive`) before building.
 
 Install the debug APK with platform-tools:
 

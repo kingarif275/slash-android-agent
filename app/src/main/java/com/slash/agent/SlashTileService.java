@@ -1,5 +1,6 @@
 package com.slash.agent;
 
+import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.os.Build;
@@ -15,6 +16,7 @@ public final class SlashTileService extends TileService {
         getQsTile().updateTile();
     }
 
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     @Override public void onClick() {
         Intent chat = new Intent(this, MainActivity.class)
                 .putExtra(MainActivity.EXTRA_START_VOICE, true)

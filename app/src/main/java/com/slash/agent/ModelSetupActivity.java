@@ -3,6 +3,7 @@ package com.slash.agent;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
@@ -18,18 +19,23 @@ import android.widget.TextView;
 import java.util.Locale;
 
 public final class ModelSetupActivity extends Activity {
+    private static final int PICK_SPEAKER_REFERENCE = 7001;
     private LocalModelManager models;
+    private ChatterboxNanoModelManager voiceModels;
     private ChatCoordinator coordinator;
     private TextView selected;
     private TextView status;
     private ProgressBar progress;
     private Button download;
+    private TextView voiceStatus;
+    private Button voiceDownload;
     private Typeface inter;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         coordinator = ((SlashApplication) getApplication()).coordinator();
         models = coordinator.modelManager();
+        voiceModels = coordinator.voiceModelManager();
         inter = Typeface.createFromAsset(getAssets(), "fonts/Inter-Regular.otf");
         getWindow().setStatusBarColor(Color.WHITE);
         getWindow().setNavigationBarColor(Color.WHITE);
@@ -90,7 +96,27 @@ public final class ModelSetupActivity extends Activity {
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
         buttonParams.topMargin = dp(18);
         root.addView(download, buttonParams);
+
+        TextView voiceHeading = label("Neural voice", 24, Color.rgb(13, 13, 13));
+        voiceHeading.setPadding(0, dp(32), 0, dp(12));
+        root.addView(voiceHeading);
+        root.addView(label("Voice turns use the local Chatterbox Nano ONNX runtime at 24 kHz. Its model package and a short speaker-reference WAV are stored privately on this device.", 15, Color.rgb(92, 92, 92)));
+        voiceStatus = label("", 14, Color.rgb(92, 92, 92));
+        root.addView(voiceStatus);
+        voiceDownload = new Button(this);
+        voiceDownload.setAllCaps(false);
+        voiceDownload.setText("Download neural voice model");
+        voiceDownload.setOnClickListener(view -> downloadVoiceModel());
+        root.addView(voiceDownload, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
+        Button importVoice = new Button(this);
+        importVoice.setAllCaps(false);
+        importVoice.setText("Choose speaker-reference WAV");
+        importVoice.setOnClickListener(view -> chooseSpeakerReference());
+        LinearLayout.LayoutParams importParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        importParams.topMargin = dp(10);
+        root.addView(importVoice, importParams);
         refreshSelection();
+        refreshVoiceSelection();
         scroll.addView(root, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
@@ -125,6 +151,50 @@ public final class ModelSetupActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void downloadVoiceModel() {
+        voiceDownload.setEnabled(false);
+        voiceStatus.setText("Preparing Chatterbox Nano download…");
+        voiceModels.download(new ChatterboxNanoModelManager.ProgressCallback() {
+            @Override public void onProgress(long completedFiles, long totalFiles, String currentFile) {
+                runOnUiThread(() -> voiceStatus.setText("Verified " + completedFiles + " of " + totalFiles + " files\n" + currentFile));
+            }
+
+            @Override public void onComplete(Throwable error) {
+                runOnUiThread(() -> {
+                    voiceDownload.setEnabled(true);
+                    if (error == null) refreshVoiceSelection();
+                    else voiceStatus.setText("Neural voice download failed: " + error.getMessage());
+                });
+            }
+        });
+    }
+
+    private void chooseSpeakerReference() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("audio/wav")
+                .addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, PICK_SPEAKER_REFERENCE);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_SPEAKER_REFERENCE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        try {
+            voiceModels.installSpeakerReference(data.getData());
+            refreshVoiceSelection();
+        } catch (Exception error) {
+            voiceStatus.setText("Speaker profile import failed: " + error.getMessage());
+        }
+    }
+
+    private void refreshVoiceSelection() {
+        if (voiceStatus == null) return;
+        String model = voiceModels.modelReady() ? "model verified" : "model not downloaded";
+        String speaker = voiceModels.speakerReference().isFile() ? "speaker profile ready" : "speaker profile required";
+        voiceStatus.setText("Chatterbox Nano: " + model + " · " + speaker
+                + (voiceModels.ready() ? "\nVoice mode will use CHATTERBOX_NANO_ONNX." : "\nAndroid TTS remains the failure fallback until both are ready."));
+        if (voiceDownload != null) voiceDownload.setText(voiceModels.modelReady() ? "Re-verify / repair neural voice model" : "Download neural voice model (~550 MB)");
     }
 
     private TextView label(String value, int size, int color) {

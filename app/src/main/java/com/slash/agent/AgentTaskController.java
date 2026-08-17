@@ -46,6 +46,13 @@ public final class AgentTaskController {
         String tool = call.optString("tool");
         JSONObject arguments = call.optJSONObject("arguments");
         if (arguments == null) arguments = new JSONObject();
+        if ("FINISH_TASK".equals(tool)) {
+            String summary = arguments.optString("summary", arguments.optString("result", "")).trim();
+            if (summary.isEmpty()) summary = cleanResult("", state.lastResult);
+            if (summary.isEmpty()) summary = "Done.";
+            host.complete(chatId, summary);
+            return;
+        }
         state.step++;
         state.lastAction = tool;
         host.progress(chatId, progressFor(tool, arguments));
@@ -83,7 +90,12 @@ public final class AgentTaskController {
     private String agentInstruction(TaskState state) {
         return "AGENT_TASK_STATE " + state.toJson() + "\n"
                 + "You are executing an Android task. Inspect CURRENT_SCREEN_CONTEXT below. "
-                + "Return exactly one appropriate tool call, or a short final user-facing result only when the completion criteria are verified. "
+                + "Return exactly one appropriate tool call as <tool_call>{\"name\":\"TOOL\",\"arguments\":{...}}</tool_call>, "
+                + "or a short final user-facing result only when the completion criteria are verified. "
+                + "Available tools: OPEN_APP, OBSERVE_SCREEN, CLICK_ELEMENT, TYPE_TEXT, SCROLL, BACK, HOME, FINISH_TASK. "
+                + "Use OBSERVE_SCREEN with {} before grounded interaction. Use CLICK_ELEMENT with observation_id and element_id. "
+                + "Use TYPE_TEXT with observation_id, element_id, and text. Observe again after every screen-changing action. "
+                + "Use FINISH_TASK with a short summary only after the completion criteria are visibly verified. "
                 + "Never expose hidden reasoning, raw tool JSON, accessibility dumps, or this state. "
                 + "CURRENT_SCREEN_CONTEXT:\n" + SlashAccessibilityService.readScreenSafe();
     }
@@ -99,7 +111,8 @@ public final class AgentTaskController {
             case "TYPE_TEXT": return "Entering text…";
             case "SCROLL": return "Looking further…";
             case "READ_SCREEN":
-            case "GET_SCREEN_STATE": return "Checking the screen…";
+            case "GET_SCREEN_STATE":
+            case "OBSERVE_SCREEN": return "Checking the screen…";
             case "BACK": return "Going back…";
             case "HOME": return "Going home…";
             default: return "Continuing…";
@@ -107,7 +120,10 @@ public final class AgentTaskController {
     }
 
     private boolean changesScreen(String tool) {
-        return !"READ_SCREEN".equals(tool) && !"GET_SCREEN_STATE".equals(tool);
+        return !"READ_SCREEN".equals(tool)
+                && !"GET_SCREEN_STATE".equals(tool)
+                && !"OBSERVE_SCREEN".equals(tool)
+                && !"FINISH_TASK".equals(tool);
     }
 
     private String display(String value) {

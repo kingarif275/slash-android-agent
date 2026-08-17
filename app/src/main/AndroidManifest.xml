@@ -7,12 +7,17 @@
     </queries>
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".SlashApplication"
         android:theme="@style/Theme.Slash"
-        android:label="Slash"
+        android:label="@string/app_name"
+        android:icon="@drawable/ic_slash_tile"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
@@ -25,6 +30,14 @@
             </intent-filter>
         </activity>
         <activity android:name=".ModelSetupActivity" android:exported="false" />
+        <service
+            android:name=".SlashRuntimeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-initiated on-device AI inference and accessibility automation that must continue while the target app is visible" />
+        </service>
         <service
             android:name=".SlashTileService"
             android:label="Slash voice"

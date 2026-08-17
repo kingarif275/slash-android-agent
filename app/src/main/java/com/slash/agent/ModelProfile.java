@@ -1,7 +1,7 @@
 package com.slash.agent;
 
 public final class ModelProfile {
-    public enum Tier { LITE, BALANCED, CUSTOM }
+    public enum Tier { LITE, BALANCED, HIGH, CUSTOM }
     public enum ToolSupport { QWEN_NATIVE_EXPECTED, UNVERIFIED, UNSUPPORTED }
 
     public final String id;
