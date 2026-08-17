@@ -1,0 +1,171 @@
+package com.slash.agent;
+
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.UUID;
+
+/** Local source of truth for chats, messages, and cross-chat memory. */
+public final class ChatRepository extends SQLiteOpenHelper {
+    private static final String DATABASE = "slash.db";
+    private static final int VERSION = 1;
+
+    public ChatRepository(Context context) {
+        super(context.getApplicationContext(), DATABASE, null, VERSION);
+    }
+
+    @Override public void onCreate(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE chats (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, type TEXT NOT NULL, FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE)");
+        db.execSQL("CREATE INDEX messages_by_chat ON messages(chat_id, id)");
+        db.execSQL("CREATE TABLE memories (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)");
+    }
+
+    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { }
+
+    @Override public void onConfigure(SQLiteDatabase db) {
+        super.onConfigure(db);
+        db.setForeignKeyConstraintsEnabled(true);
+    }
+
+    public synchronized String createChat() {
+        String id = UUID.randomUUID().toString();
+        long now = System.currentTimeMillis();
+        ContentValues values = new ContentValues();
+        values.put("id", id);
+        values.put("title", "New chat");
+        values.put("created_at", now);
+        values.put("updated_at", now);
+        getWritableDatabase().insertOrThrow("chats", null, values);
+        return id;
+    }
+
+    public synchronized String latestOrCreateChat() {
+        try (Cursor cursor = getReadableDatabase().query("chats", new String[]{"id"}, null, null, null, null, "updated_at DESC", "1")) {
+            if (cursor.moveToFirst()) return cursor.getString(0);
+        }
+        return createChat();
+    }
+
+    public synchronized boolean chatExists(String id) {
+        if (id == null) return false;
+        try (Cursor cursor = getReadableDatabase().query("chats", new String[]{"id"}, "id = ?", new String[]{id}, null, null, null, "1")) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    public synchronized List<ChatSummary> listChats() {
+        List<ChatSummary> chats = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("chats", new String[]{"id", "title", "created_at", "updated_at"}, null, null, null, null, "updated_at DESC")) {
+            while (cursor.moveToNext()) chats.add(new ChatSummary(cursor.getString(0), cursor.getString(1), cursor.getLong(2), cursor.getLong(3)));
+        }
+        return chats;
+    }
+
+    public synchronized String title(String chatId) {
+        try (Cursor cursor = getReadableDatabase().query("chats", new String[]{"title"}, "id = ?", new String[]{chatId}, null, null, null, "1")) {
+            return cursor.moveToFirst() ? cursor.getString(0) : "Slash";
+        }
+    }
+
+    public synchronized long appendMessage(String chatId, String role, String content, String type, long timestamp) {
+        if (!chatExists(chatId)) throw new IllegalArgumentException("Unknown chat: " + chatId);
+        ContentValues message = new ContentValues();
+        message.put("chat_id", chatId);
+        message.put("role", role);
+        message.put("content", content);
+        message.put("timestamp", timestamp);
+        message.put("type", type);
+        long id = getWritableDatabase().insertOrThrow("messages", null, message);
+
+        ContentValues chat = new ContentValues();
+        chat.put("updated_at", timestamp);
+        getWritableDatabase().update("chats", chat, "id = ?", new String[]{chatId});
+        if ("user".equals(role)) setInitialTitle(chatId, content);
+        return id;
+    }
+
+    private void setInitialTitle(String chatId, String content) {
+        if (!"New chat".equals(title(chatId))) return;
+        String clean = content.replaceAll("\\s+", " ").trim();
+        if (clean.length() > 44) clean = clean.substring(0, 43).trim() + "…";
+        if (clean.isEmpty()) return;
+        ContentValues values = new ContentValues();
+        values.put("title", clean);
+        getWritableDatabase().update("chats", values, "id = ?", new String[]{chatId});
+    }
+
+    public synchronized List<ChatMessage> messages(String chatId) {
+        List<ChatMessage> messages = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("messages", new String[]{"id", "chat_id", "role", "content", "timestamp", "type"}, "chat_id = ?", new String[]{chatId}, null, null, "id ASC")) {
+            while (cursor.moveToNext()) messages.add(new ChatMessage(cursor.getLong(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getLong(4), cursor.getString(5)));
+        }
+        return messages;
+    }
+
+    public synchronized void updateMessageContent(long id, String content) {
+        ContentValues values = new ContentValues();
+        values.put("content", content);
+        getWritableDatabase().update("messages", values, "id = ?", new String[]{Long.toString(id)});
+    }
+
+    public synchronized List<ChatMessage> recentModelMessages(String chatId, int limit) {
+        List<ChatMessage> reversed = new ArrayList<>();
+        String selection = "chat_id = ? AND type IN (?, ?)";
+        String[] arguments = {chatId, ChatMessage.USER_TEXT, ChatMessage.ASSISTANT_TEXT};
+        try (Cursor cursor = getReadableDatabase().query("messages", new String[]{"id", "chat_id", "role", "content", "timestamp", "type"}, selection, arguments, null, null, "id DESC", Integer.toString(limit))) {
+            while (cursor.moveToNext()) reversed.add(new ChatMessage(cursor.getLong(0), cursor.getString(1), cursor.getString(2), cursor.getString(3), cursor.getLong(4), cursor.getString(5)));
+        }
+        List<ChatMessage> ordered = new ArrayList<>();
+        for (int i = reversed.size() - 1; i >= 0; i--) ordered.add(reversed.get(i));
+        return ordered;
+    }
+
+    public synchronized void remember(String content) {
+        String clean = content == null ? "" : content.replaceAll("\\s+", " ").trim();
+        if (clean.isEmpty()) return;
+        ContentValues values = new ContentValues();
+        values.put("content", clean);
+        values.put("created_at", System.currentTimeMillis());
+        getWritableDatabase().insertWithOnConflict("memories", null, values, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
+    public synchronized List<String> relevantMemories(String query, int limit) {
+        Set<String> terms = tokens(query);
+        List<ScoredMemory> scored = new ArrayList<>();
+        try (Cursor cursor = getReadableDatabase().query("memories", new String[]{"content"}, null, null, null, null, "created_at DESC", "100")) {
+            while (cursor.moveToNext()) {
+                String content = cursor.getString(0);
+                Set<String> memoryTerms = tokens(content);
+                int score = 0;
+                for (String term : terms) if (memoryTerms.contains(term)) score++;
+                if (score > 0 || terms.isEmpty()) scored.add(new ScoredMemory(content, score));
+            }
+        }
+        scored.sort((left, right) -> Integer.compare(right.score, left.score));
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < Math.min(limit, scored.size()); i++) result.add(scored.get(i).content);
+        return result;
+    }
+
+    private Set<String> tokens(String text) {
+        Set<String> result = new LinkedHashSet<>();
+        if (text == null) return result;
+        for (String word : text.toLowerCase(Locale.US).split("[^a-z0-9]+")) if (word.length() > 2) result.add(word);
+        return result;
+    }
+
+    private static final class ScoredMemory {
+        final String content;
+        final int score;
+        ScoredMemory(String content, int score) { this.content = content; this.score = score; }
+    }
+}

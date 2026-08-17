@@ -2,6 +2,7 @@ package com.slash.agent;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.StatFs;
 
@@ -12,41 +13,95 @@ import java.io.FileOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class LocalModelManager {
-    public static final String MODEL_ID = "qwen3-0.6b-q4_k_m";
-    private static final String MODEL_FILE = "Qwen3-0.6B-Q4_K_M.gguf";
-    private static final String MODEL_URL = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true";
+    private static final String PREFERENCES = "slash_models";
+    private static final String SELECTED_PROFILE = "selected_profile";
+    private static final long GIB = 1024L * 1024L * 1024L;
+
+    public static final ModelProfile LITE = new ModelProfile(
+            "qwen3-0.6b-q8_0", "Lite · Qwen3 0.6B Q8", "Qwen3-0.6B-Q8_0.gguf",
+            "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf?download=true",
+            "qwen3", 32768, "qwen3", ModelProfile.ToolSupport.QWEN_NATIVE_EXPECTED,
+            ModelProfile.Tier.LITE, 500_000_000L, 4L * GIB);
+
+    public static final ModelProfile BALANCED = new ModelProfile(
+            "qwen3-1.7b-q4_k_m", "Balanced · Qwen3 1.7B Q4_K_M", "Qwen3-1.7B-Q4_K_M.gguf",
+            "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
+            "qwen3", 32768, "qwen3", ModelProfile.ToolSupport.QWEN_NATIVE_EXPECTED,
+            ModelProfile.Tier.BALANCED, 900_000_000L, 6L * GIB);
+
+    private static final List<ModelProfile> PROFILES = Collections.unmodifiableList(Arrays.asList(LITE, BALANCED));
     private final Context context;
+    private final SharedPreferences preferences;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
-    public LocalModelManager(Context context) { this.context = context.getApplicationContext(); }
+    public LocalModelManager(Context context) {
+        this.context = context.getApplicationContext();
+        preferences = this.context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
+    }
 
-    public File modelFile() { return new File(new File(context.getFilesDir(), "models"), MODEL_FILE); }
-    public boolean exists() { return modelFile().isFile() && modelFile().length() > 100_000_000L && isGguf(modelFile()); }
+    public List<ModelProfile> profiles() { return PROFILES; }
+
+    public ModelProfile selectedProfile() {
+        String selected = preferences.getString(SELECTED_PROFILE, BALANCED.id);
+        for (ModelProfile profile : PROFILES) if (profile.id.equals(selected)) return profile;
+        return BALANCED;
+    }
+
+    public void selectProfile(String id) {
+        for (ModelProfile profile : PROFILES) {
+            if (profile.id.equals(id)) {
+                preferences.edit().putString(SELECTED_PROFILE, id).apply();
+                return;
+            }
+        }
+        throw new IllegalArgumentException("Unknown model profile");
+    }
+
+    public File modelFile() {
+        return new File(new File(context.getFilesDir(), "models"), selectedProfile().fileName);
+    }
+
+    public boolean exists() {
+        ModelProfile profile = selectedProfile();
+        return modelFile().isFile() && modelFile().length() >= profile.minimumBytes && isGguf(modelFile());
+    }
 
     public String capabilitySummary() {
         ActivityManager.MemoryInfo memory = new ActivityManager.MemoryInfo();
         ((ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryInfo(memory);
         StatFs storage = new StatFs(context.getFilesDir().getAbsolutePath());
         long free = storage.getAvailableBytes();
+        ModelProfile profile = selectedProfile();
         String abi = Build.SUPPORTED_ABIS.length == 0 ? "unknown" : Build.SUPPORTED_ABIS[0];
-        String tier = memory.totalMem >= 8L * 1024 * 1024 * 1024 && free >= 1_500_000_000L ? "RECOMMENDED" :
-                memory.totalMem >= 4L * 1024 * 1024 * 1024 && free >= 800_000_000L ? "BASIC_LOCAL_AI" : "UNSUPPORTED";
-        return tier + "; android=" + Build.VERSION.SDK_INT + "; abi=" + abi + "; ram=" + memory.totalMem + "; free_storage=" + free;
+        long neededStorage = Math.max(800_000_000L, profile.minimumBytes + 500_000_000L);
+        String tier = memory.totalMem >= profile.recommendedRamBytes && free >= neededStorage ? "RECOMMENDED" :
+                memory.totalMem >= 4L * GIB && free >= profile.minimumBytes + 200_000_000L ? "BASIC_LOCAL_AI" : "UNSUPPORTED";
+        return tier + "; model=" + profile.id + "; tools=" + profile.toolCallingSupport
+                + "; android=" + Build.VERSION.SDK_INT + "; abi=" + abi
+                + "; ram=" + memory.totalMem + "; free_storage=" + free;
     }
 
-    public void downloadRecommended(ProgressCallback callback) {
+    public void downloadSelected(ProgressCallback callback) {
         worker.execute(() -> {
+            ModelProfile profile = selectedProfile();
             try {
                 File dir = modelFile().getParentFile();
                 if (!dir.exists() && !dir.mkdirs()) throw new IllegalStateException("Cannot create model directory");
-                File temporary = new File(dir, MODEL_FILE + ".download");
-                HttpURLConnection connection = (HttpURLConnection) new URL(MODEL_URL).openConnection();
+                File temporary = new File(dir, profile.fileName + ".download");
+                HttpURLConnection connection = (HttpURLConnection) new URL(profile.downloadUrl).openConnection();
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(60000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "Slash-Android/0.2");
+                int status = connection.getResponseCode();
+                if (status < 200 || status >= 300) throw new IllegalStateException("Model download returned HTTP " + status);
                 long total = connection.getContentLengthLong();
                 long received = 0;
                 try (BufferedInputStream input = new BufferedInputStream(connection.getInputStream());
@@ -59,11 +114,15 @@ public final class LocalModelManager {
                         if (callback != null) callback.onProgress(received, total);
                     }
                 } finally { connection.disconnect(); }
-                if (!isGguf(temporary)) throw new IllegalStateException("Downloaded file is not a valid GGUF model");
+                if (temporary.length() < profile.minimumBytes || !isGguf(temporary)) {
+                    throw new IllegalStateException("Downloaded file is not a compatible GGUF model");
+                }
                 if (modelFile().exists() && !modelFile().delete()) throw new IllegalStateException("Cannot replace old model");
                 if (!temporary.renameTo(modelFile())) throw new IllegalStateException("Cannot finalize model file");
                 if (callback != null) callback.onComplete(null);
-            } catch (Throwable error) { if (callback != null) callback.onComplete(error); }
+            } catch (Throwable error) {
+                if (callback != null) callback.onComplete(error);
+            }
         });
     }
 

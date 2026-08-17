@@ -1,24 +1,12 @@
 <resources>
     <style name="Theme.Slash" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#FFC107</item>
-        <item name="android:navigationBarColor">#101010</item>
-        <item name="android:statusBarColor">#101010</item>
-        <item name="android:windowLightStatusBar">false</item>
-    </style>
-    <style name="Theme.Slash.Gate" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:windowDisablePreview">true</item>
-    </style>
-    <style name="Theme.Slash.Glow" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:windowIsTranslucent">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:backgroundDimEnabled">false</item>
-        <item name="android:windowDisablePreview">true</item>
-        <item name="android:colorAccent">@android:color/transparent</item>
+        <item name="android:colorAccent">#0D0D0D</item>
+        <item name="android:windowBackground">#FFFFFF</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

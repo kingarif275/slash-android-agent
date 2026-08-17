@@ -20,9 +20,9 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
 
     @Override public void loadModel(Callback callback) {
         if (!nativeAvailable) { callback.onComplete("Slash needs its embedded local inference runtime before we can talk.", null); return; }
-        if (!models.exists()) { callback.onComplete("Slash needs its local AI model before we can talk. Download the recommended model in setup.", null); return; }
+        if (!models.exists()) { callback.onComplete("Slash needs its local AI model before we can talk. Download the selected model in setup.", null); return; }
         if (!models.capabilitySummary().startsWith("RECOMMENDED") && !models.capabilitySummary().startsWith("BASIC_LOCAL_AI")) {
-            callback.onComplete("This device does not currently have enough resources for the recommended local model.", null); return;
+            callback.onComplete("This device does not currently have enough resources for the selected local model.", null); return;
         }
         modelPath = models.modelFile().getAbsolutePath();
         loaded = nativeLoad(modelPath);
