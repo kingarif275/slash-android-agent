@@ -102,6 +102,15 @@ The pinned llama.cpp revision also contains experimental Qualcomm backends:
 
 Those optional dependencies are not bundled in this repository or APK. Slash therefore does not claim `GPU` or `NPU` in diagnostics until a backend is compiled, initialized, and proven on-device. When accelerator packaging is added, backend logs must include the selected device, accelerated layer count, CPU layer count, and inference timings before the backend is exposed as active.
 
+To build the optional Adreno OpenCL variant locally, prepare an Android OpenCL ICD/toolchain and set its root before Gradle:
+
+```powershell
+$env:SLASH_OPENCL_ROOT = "C:\path\to\opencl\install"
+.\gradlew.bat assembleDebug
+```
+
+Without `SLASH_OPENCL_ROOT`, the normal portable build remains CPU/KleidiAI-only.
+
 ## Neural voice
 
 Voice turns use `ChatterboxNanoVoiceRuntime` when its separately downloaded model and speaker reference are ready. It runs the published four-graph ONNX pipeline (embedding, reference encoder, autoregressive language model with a 12-layer KV cache, and conditional decoder), then plays 24 kHz mono PCM. The local-model screen verifies every artifact against its published SHA-256 and imports a private 16-bit PCM WAV speaker reference. Android `TextToSpeech` is used only if neural synthesis fails. Typed turns remain text-only.

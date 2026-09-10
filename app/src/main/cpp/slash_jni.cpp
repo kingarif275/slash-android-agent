@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <llama.h>
+#include <ggml-backend.h>
 
 #include <algorithm>
 #include <atomic>
@@ -206,9 +207,21 @@ Java_com_slash_agent_EmbeddedLlamaRuntime_nativeLoad(
     llama_backend_init();
     backend_initialized = true;
 
+    ggml_backend_load_all();
+    log_info("LOCAL_AI_BACKEND_DETECTED");
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        ggml_backend_dev_t device = ggml_backend_dev_get(i);
+        if (device == nullptr) continue;
+        log_info(std::string("LOCAL_AI_BACKEND_DEVICE name=") + ggml_backend_dev_name(device)
+                 + " description=" + ggml_backend_dev_description(device));
+    }
+
     std::string model_path = from_java(env, path);
     llama_model_params model_params = llama_model_default_params();
-    model_params.n_gpu_layers = 0;
+    // -1 requests full offload when a compiled accelerator backend is
+    // available. CPU-only builds safely ignore this and remain the fallback.
+    model_params.n_gpu_layers = -1;
+    log_info("LOCAL_AI_BACKEND_SELECTED=auto accelerator_preferred");
     model = llama_model_load_from_file(model_path.c_str(), model_params);
     if (model == nullptr) {
         log_error("NATIVE_MODEL_LOAD_FAILED path=" + model_path);

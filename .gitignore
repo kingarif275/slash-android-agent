@@ -12,3 +12,4 @@ captures/
 qa-*.png
 *.backup
 .codex-remote-attachments/
+app/.cxx.locked-backup/

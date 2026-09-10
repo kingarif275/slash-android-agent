@@ -28,6 +28,21 @@ set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 # supported phones while a Vulkan shader toolchain is not bundled.
 set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 
+# Optional Adreno OpenCL build. The SDK/ICD loader is intentionally opt-in so
+# normal clones remain portable; the accelerator build sets SLASH_OPENCL_ROOT
+# to a prepared Android OpenCL toolchain directory.
+if (DEFINED ENV{SLASH_OPENCL_ROOT} AND IS_DIRECTORY "$ENV{SLASH_OPENCL_ROOT}")
+    set(CMAKE_PREFIX_PATH "$ENV{SLASH_OPENCL_ROOT};${CMAKE_PREFIX_PATH}")
+    set(OpenCL_INCLUDE_DIR "$ENV{SLASH_OPENCL_ROOT}/../../OpenCL-Headers" CACHE PATH "" FORCE)
+    set(OpenCL_LIBRARY "$ENV{SLASH_OPENCL_ROOT}/lib/libOpenCL.so" CACHE FILEPATH "" FORCE)
+    set(GGML_OPENCL ON CACHE BOOL "" FORCE)
+    set(GGML_OPENCL_USE_ADRENO_KERNELS ON CACHE BOOL "" FORCE)
+    message(STATUS "Slash: Adreno OpenCL backend enabled")
+else()
+    set(GGML_OPENCL OFF CACHE BOOL "" FORCE)
+    message(STATUS "Slash: accelerator toolchain unavailable; CPU fallback only")
+endif()
+
 add_subdirectory(llama.cpp EXCLUDE_FROM_ALL)
 
 add_library(slash_llama SHARED slash_jni.cpp)
