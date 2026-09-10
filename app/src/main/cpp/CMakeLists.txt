@@ -23,7 +23,10 @@ set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
-set(GGML_CPU_KLEIDIAI OFF CACHE BOOL "" FORCE)
+# Use ARM KleidiAI kernels when building for arm64 Android. This keeps the
+# universal CPU fallback but uses optimized dot-product/NEON kernels on
+# supported phones while a Vulkan shader toolchain is not bundled.
+set(GGML_CPU_KLEIDIAI ON CACHE BOOL "" FORCE)
 
 add_subdirectory(llama.cpp EXCLUDE_FROM_ALL)
 
