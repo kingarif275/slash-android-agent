@@ -653,7 +653,17 @@ public final class AgentTaskController {
             scheduler.execute(() -> {
                 SlashAccessibilityService.awaitStableUi(uiEventToken, 600);
                 if (!host.isCurrent(token)) return;
-                state.world = AgentWorldState.capture(appContext);
+                // App launch and app readiness are different events. Wait for
+                // the requested package plus a non-empty accessibility surface;
+                // this is event/condition based and capped, not a fixed sleep.
+                long readyDeadline = android.os.SystemClock.elapsedRealtime() + 2_000;
+                do {
+                    state.world = AgentWorldState.capture(appContext);
+                    String screen = state.world.accessibilityObservation == null ? "" : state.world.accessibilityObservation;
+                    if (foregroundMatchesQuery(state.world, state.lastOpenQuery)
+                            && !screen.isEmpty() && !screen.contains("ELEMENTS=NONE")) break;
+                    android.os.SystemClock.sleep(120);
+                } while (android.os.SystemClock.elapsedRealtime() < readyDeadline && host.isCurrent(token));
                 commitObservedOpenObjective(state, state.world.foregroundPackage());
                 JSONObject mediaAction = semanticMediaFallback(state);
                 if (mediaAction != null) {
