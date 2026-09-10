@@ -9,16 +9,23 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.text.InputType;
 
 import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public final class ModelSetupActivity extends Activity {
+    private static final String[] MODEL_CATALOG = {
+            "gemini-live-2.5-flash-native-audio", "gemini-live-2.5-flash", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite", "claude-sonnet-5", "claude-fable-5.1", "claude-opus-5", "claude-opus-4.6", "claude-sonnet-4.6", "claude-haiku-4.5", "minimax-m2", "kimi-k2", "kimi-k2-thinking", "deepseek-v3.2", "deepseek-v3.2-speciale", "deepseek-v3.1", "deepseek-r1", "glm-5", "glm-4.7", "mistral-large-3", "ministral-3", "mistral-small", "mistral-nemo", "llama-4-maverick", "llama-4-scout", "llama-3.3", "qwen3", "qwen3-next", "qwen3-next-80b-thinking", "qwen3-coder", "qwen3-vl", "gpt-oss-120b", "gpt-oss-20b", "nemotron-3-super-120b", "nemotron-3-nano", "gemma-3"
+    };
     private static final int PICK_SPEAKER_REFERENCE = 7001;
     private LocalModelManager models;
     private ChatterboxNanoModelManager voiceModels;
@@ -27,9 +34,20 @@ public final class ModelSetupActivity extends Activity {
     private TextView status;
     private ProgressBar progress;
     private Button download;
+    private TextView cloudStatus;
+    private EditText cloudKey;
+    private Button cloudUse;
+    private Button conversationModelChoice;
+    private Button agentModelChoice;
+    private RadioGroup runtimeChoices;
+    private RadioButton localRuntimeOption;
+    private RadioButton cloudRuntimeOption;
+    private boolean refreshingRuntimeChoice;
     private TextView voiceStatus;
     private Button voiceDownload;
     private Typeface inter;
+    private String pendingProfileId;
+    private final Map<String, RadioButton> profileOptions = new LinkedHashMap<>();
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -63,22 +81,24 @@ public final class ModelSetupActivity extends Activity {
 
         RadioGroup choices = new RadioGroup(this);
         choices.setOrientation(RadioGroup.VERTICAL);
+        pendingProfileId = models.selectedProfile().id;
         for (ModelProfile profile : models.profiles()) {
             RadioButton option = new RadioButton(this);
             option.setId(View.generateViewId());
             option.setTag(profile.id);
-            option.setText(profile.displayName + "\n" + profile.architecture + " · " + profile.contextLength + " context · tools " + profile.toolCallingSupport);
+            option.setText(profileOptionText(profile));
             option.setTextSize(15);
             option.setTypeface(inter);
             option.setTextColor(Color.rgb(13, 13, 13));
             option.setPadding(0, dp(8), 0, dp(8));
             choices.addView(option, new RadioGroup.LayoutParams(RadioGroup.LayoutParams.MATCH_PARENT, RadioGroup.LayoutParams.WRAP_CONTENT));
+            profileOptions.put(profile.id, option);
             if (profile.id.equals(models.selectedProfile().id)) choices.check(option.getId());
         }
         choices.setOnCheckedChangeListener((group, checkedId) -> {
             RadioButton checked = group.findViewById(checkedId);
             if (checked == null) return;
-            coordinator.selectModelProfile(String.valueOf(checked.getTag()));
+            pendingProfileId = String.valueOf(checked.getTag());
             refreshSelection();
         });
         root.addView(choices);
@@ -89,13 +109,104 @@ public final class ModelSetupActivity extends Activity {
         progress.setMax(1000);
         download = new Button(this);
         download.setAllCaps(false);
-        download.setOnClickListener(view -> downloadSelected());
+        download.setOnClickListener(view -> handleModelAction());
         root.addView(selected);
         root.addView(status);
         root.addView(progress, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4)));
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
         buttonParams.topMargin = dp(18);
         root.addView(download, buttonParams);
+
+        TextView cloudHeading = label("Vertex AI Gemini", 24, Color.rgb(13, 13, 13));
+        cloudHeading.setPadding(0, dp(32), 0, dp(12));
+        root.addView(cloudHeading);
+        root.addView(label("Choose separate Vertex AI models for normal conversation and grounded Agent Mode. Cloud messages leave this phone and are processed by Google Cloud.", 15, Color.rgb(92, 92, 92)));
+        root.addView(label("Conversation catalog: Google, Anthropic, MiniMax, Kimi, DeepSeek, GLM, Mistral, Llama, Qwen, GPT-OSS, Nemotron and Gemma. Use the dropdown to choose.", 13, Color.rgb(92, 92, 92)));
+        root.addView(label("Conversation model", 15, Color.rgb(13, 13, 13)));
+        conversationModelChoice = modelSpinner(MODEL_CATALOG, coordinator.cloudAiSettings().conversationModel());
+        root.addView(conversationModelChoice);
+        root.addView(label("Agent catalog: frontier reasoning, coding and tool-use models from Google and Model Garden partners. Use the dropdown to choose.", 13, Color.rgb(92, 92, 92)));
+        root.addView(label("Agent model", 15, Color.rgb(13, 13, 13)));
+        agentModelChoice = modelSpinner(MODEL_CATALOG, coordinator.cloudAiSettings().agentModel());
+        root.addView(agentModelChoice);
+        cloudStatus = label("", 14, Color.rgb(92, 92, 92));
+        root.addView(cloudStatus);
+        runtimeChoices = new RadioGroup(this);
+        runtimeChoices.setOrientation(RadioGroup.VERTICAL);
+        localRuntimeOption = new RadioButton(this);
+        localRuntimeOption.setId(View.generateViewId());
+        localRuntimeOption.setText("Local — selected abliterated Qwen3\nPrivate and works offline");
+        localRuntimeOption.setTextSize(15);
+        localRuntimeOption.setTypeface(inter);
+        localRuntimeOption.setPadding(0, dp(6), 0, dp(6));
+        cloudRuntimeOption = new RadioButton(this);
+        cloudRuntimeOption.setId(View.generateViewId());
+        cloudRuntimeOption.setText("Cloud — Vertex AI Gemini\nFlash-Lite conversation · Flash agent");
+        cloudRuntimeOption.setTextSize(15);
+        cloudRuntimeOption.setTypeface(inter);
+        cloudRuntimeOption.setPadding(0, dp(6), 0, dp(6));
+        runtimeChoices.addView(localRuntimeOption);
+        runtimeChoices.addView(cloudRuntimeOption);
+        runtimeChoices.setOnCheckedChangeListener((group, checkedId) -> {
+            if (refreshingRuntimeChoice) return;
+            if (checkedId == localRuntimeOption.getId()) {
+                coordinator.activateLocalRuntime(this::refreshCloudSelection);
+                return;
+            }
+            if (checkedId != cloudRuntimeOption.getId()) return;
+            if (!coordinator.cloudAiSettings().hasApiKey()) {
+                cloudStatus.setText("Save a Vertex AI Express Mode API key below first.");
+                refreshingRuntimeChoice = true;
+                runtimeChoices.check(localRuntimeOption.getId());
+                refreshingRuntimeChoice = false;
+                return;
+            }
+            coordinator.activateSavedCloudRuntime(this::refreshCloudSelection);
+        });
+        root.addView(runtimeChoices);
+        cloudKey = new EditText(this);
+        cloudKey.setHint("Vertex AI Express Mode API key (AQ.…)");
+        cloudKey.setSingleLine(true);
+        cloudKey.setTextSize(15);
+        cloudKey.setTypeface(inter);
+        cloudKey.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        cloudKey.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        root.addView(cloudKey, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(56)));
+        cloudUse = new Button(this);
+        cloudUse.setAllCaps(false);
+        cloudUse.setText("Save key and use Vertex AI Gemini");
+        cloudUse.setOnClickListener(view -> activateCloud());
+        LinearLayout.LayoutParams cloudButtonParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        cloudButtonParams.topMargin = dp(10);
+        root.addView(cloudUse, cloudButtonParams);
+        Button clearCloud = new Button(this);
+        clearCloud.setAllCaps(false);
+        clearCloud.setText("Remove saved Vertex AI key");
+        clearCloud.setOnClickListener(view -> coordinator.clearCloudApiKey(() -> {
+            cloudKey.setText("");
+            refreshCloudSelection();
+        }));
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        clearParams.topMargin = dp(10);
+        root.addView(clearCloud, clearParams);
+
+        TextView agentHeading = label("Agent verification", 24, Color.rgb(13, 13, 13));
+        agentHeading.setPadding(0, dp(32), 0, dp(12));
+        root.addView(agentHeading);
+        root.addView(label("For playback goals, Slash verifies the actual Android MediaSession state and metadata instead of trusting the AI or the visible screen. Enable Slash media verification under Notification access.", 15, Color.rgb(92, 92, 92)));
+        Button mediaAccess = new Button(this);
+        mediaAccess.setAllCaps(false);
+        mediaAccess.setText("Open Notification access settings");
+        mediaAccess.setOnClickListener(view -> startActivity(
+                new Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")));
+        LinearLayout.LayoutParams mediaParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(52));
+        mediaParams.topMargin = dp(10);
+        root.addView(mediaAccess, mediaParams);
 
         TextView voiceHeading = label("Neural voice", 24, Color.rgb(13, 13, 13));
         voiceHeading.setPadding(0, dp(32), 0, dp(12));
@@ -116,41 +227,149 @@ public final class ModelSetupActivity extends Activity {
         importParams.topMargin = dp(10);
         root.addView(importVoice, importParams);
         refreshSelection();
+        refreshCloudSelection();
         refreshVoiceSelection();
         scroll.addView(root, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
 
+    private Button modelSpinner(String[] models, String selectedModel) {
+        Button button = new Button(this);
+        button.setAllCaps(false);
+        button.setText(selectedModel + "  ▾");
+        button.setTextSize(15);
+        button.setOnClickListener(view -> {
+            int checked = 0;
+            for (int i = 0; i < models.length; i++) if (models[i].equals(button.getText().toString().replace("  ▾", ""))) checked = i;
+            new android.app.AlertDialog.Builder(this)
+                    .setTitle(button == conversationModelChoice ? "Conversation model" : "Agent Mode model")
+                    .setSingleChoiceItems(models, checked, (dialog, which) -> {
+                        String value = models[which];
+                        button.setText(value + "  ▾");
+                        if (button == conversationModelChoice) coordinator.cloudAiSettings().setConversationModel(value);
+                        else coordinator.cloudAiSettings().setAgentModel(value);
+                        refreshCloudSelection();
+                        dialog.dismiss();
+                    }).show();
+        });
+        return button;
+    }
+
     private void refreshSelection() {
-        ModelProfile profile = models.selectedProfile();
-        selected.setText("Selected: " + profile.displayName);
-        download.setText(models.exists() ? "Re-download selected model" : "Download selected model");
-        status.setText(models.exists() ? "Downloaded and GGUF header validated.\n" + models.capabilitySummary()
-                : "Not downloaded.\n" + models.capabilitySummary());
+        ModelProfile active = models.selectedProfile();
+        ModelProfile profile = models.profile(pendingProfileId == null ? active.id : pendingProfileId);
+        for (ModelProfile item : models.profiles()) {
+            RadioButton option = profileOptions.get(item.id);
+            if (option != null) option.setText(profileOptionText(item));
+        }
+        selected.setText("Active: " + active.displayName + "\nChosen: " + profile.displayName);
+        if (models.isDownloading()) {
+            download.setEnabled(true);
+            download.setText("Cancel download");
+        } else if (models.exists(profile)) {
+            download.setEnabled(true);
+            download.setText(profile.id.equals(active.id) ? "Re-download selected model" : "Use installed model");
+        } else {
+            download.setEnabled(true);
+            download.setText(models.partialBytes(profile) > 0 ? "Resume download" : "Download selected model");
+        }
+        status.setText(models.exists(profile)
+                ? "Installed, checksum verified, and llama.cpp compatible.\n" + models.capabilitySummary(profile)
+                : (models.partialBytes(profile) > 0
+                    ? "Partial download ready to resume: " + formatBytes(models.partialBytes(profile)) + ".\n"
+                    : "Not downloaded.\n") + models.capabilitySummary(profile));
         progress.setProgress(0);
     }
 
-    private void downloadSelected() {
-        ModelProfile profile = models.selectedProfile();
-        download.setEnabled(false);
+    private void handleModelAction() {
+        if (models.isDownloading()) {
+            coordinator.cancelModelDownload();
+            status.setText("Cancelling safely… The partial file will be kept for resume.");
+            download.setEnabled(false);
+            return;
+        }
+        ModelProfile profile = models.profile(pendingProfileId);
+        if (models.exists(profile) && !profile.id.equals(models.selectedProfile().id)) {
+            download.setEnabled(false);
+            status.setText("Activating verified " + profile.displayName + "…");
+            coordinator.activateModelProfile(profile.id, this::refreshSelection);
+            return;
+        }
+        downloadProfile(profile);
+    }
+
+    private void downloadProfile(ModelProfile profile) {
+        download.setEnabled(true);
+        download.setText("Cancel download");
         status.setText("Downloading " + profile.displayName + "…");
-        models.downloadSelected(new LocalModelManager.ProgressCallback() {
+        coordinator.downloadModelProfile(profile.id, new LocalModelManager.ProgressCallback() {
             @Override public void onProgress(long received, long total) {
                 runOnUiThread(() -> {
                     if (total > 0) progress.setProgress((int) Math.min(1000, received * 1000 / total));
-                    String totalText = total > 0 ? String.format(Locale.US, " / %.1f MB", total / 1_000_000f) : "";
-                    status.setText(String.format(Locale.US, "Downloaded %.1f MB%s", received / 1_000_000f, totalText));
+                    String totalText = total > 0 ? " / " + formatBytes(total) : "";
+                    status.setText("Downloaded " + formatBytes(received) + totalText
+                            + "\nSafe to cancel; progress will be resumable.");
                 });
             }
 
             @Override public void onComplete(Throwable error) {
                 runOnUiThread(() -> {
-                    download.setEnabled(true);
                     if (error == null) refreshSelection();
-                    else status.setText("Download failed. Check the connection and available storage.");
+                    else {
+                        refreshSelection();
+                        status.setText("Model download was not activated: " + error.getMessage()
+                                + "\nAny safe partial download remains available to resume.");
+                    }
                 });
             }
         });
+    }
+
+    private String profileOptionText(ModelProfile profile) {
+        String tier = profile.tier == ModelProfile.Tier.LITE ? "Lite"
+                : profile.tier == ModelProfile.Tier.BALANCED ? "Balanced · Recommended" : "High";
+        String model = profile.tier == ModelProfile.Tier.LITE ? "Qwen3 0.6B Abliterated"
+                : profile.tier == ModelProfile.Tier.BALANCED ? "Qwen3 1.7B Abliterated"
+                : "Qwen3 4B Abliterated";
+        String state = models.exists(profile) ? "Installed" : models.partialBytes(profile) > 0 ? "Partial" : "Not installed";
+        if (profile.id.equals(models.selectedProfile().id)) state += " · Selected";
+        return tier + "\n" + model + "\n~" + formatBytes(profile.expectedSizeBytes) + " · " + state;
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes >= 1_000_000_000L) return String.format(Locale.US, "%.2f GB", bytes / 1_000_000_000d);
+        return String.format(Locale.US, "%.0f MB", bytes / 1_000_000d);
+    }
+
+    private void activateCloud() {
+        String key = cloudKey.getText().toString().trim();
+        if (!key.startsWith("AQ.") || key.length() < 32) {
+            cloudStatus.setText("Enter a valid Vertex AI Express Mode API key. It is never written to source or logs.");
+            return;
+        }
+        cloudUse.setEnabled(false);
+        cloudStatus.setText("Encrypting the key with Android Keystore…");
+        coordinator.activateCloudRuntime(key, () -> {
+            cloudKey.setText("");
+            cloudUse.setEnabled(true);
+            refreshCloudSelection();
+        });
+    }
+
+    private void refreshCloudSelection() {
+        if (cloudStatus == null) return;
+        boolean configured = coordinator.cloudAiSettings().hasApiKey();
+        boolean active = coordinator.cloudRuntimeSelected();
+        cloudStatus.setText("Conversation: " + coordinator.cloudAiSettings().conversationModel()
+                + "\nAgent Mode: " + coordinator.cloudAiSettings().agentModel()
+                + "\nKey: " + (configured ? "saved with Android Keystore" : "not saved")
+                + "\nActive runtime: " + (active ? "Vertex AI Gemini" : "local abliterated Qwen3"));
+        if (runtimeChoices != null) {
+            refreshingRuntimeChoice = true;
+            runtimeChoices.check(active
+                    ? cloudRuntimeOption.getId() : localRuntimeOption.getId());
+            refreshingRuntimeChoice = false;
+        }
     }
 
     private void downloadVoiceModel() {

@@ -8,36 +8,31 @@ import android.util.Log;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** Selects Chatterbox Nano first and uses Android TTS only when neural synthesis fails. */
+/** Voice output boundary. Local neural ONNX is intentionally disabled; Live voice belongs to Vertex Live. */
 public final class VoiceOutputController implements TextToSpeech.OnInitListener {
     private static final String TAG = "SlashVoiceOutput";
     private final ChatterboxNanoModelManager models;
-    private final ChatterboxNanoVoiceRuntime neural;
     private final TextToSpeech fallback;
     private final AtomicLong generation = new AtomicLong();
     private volatile boolean fallbackReady;
 
     public VoiceOutputController(Context context) {
         models = new ChatterboxNanoModelManager(context);
-        neural = new ChatterboxNanoVoiceRuntime(models);
         fallback = new TextToSpeech(context.getApplicationContext(), this);
     }
 
+    /** Kept for the model setup screen; this manager is not used for speech inference. */
     public ChatterboxNanoModelManager modelManager() { return models; }
 
     public void speak(String text) {
         if (text == null || text.trim().isEmpty()) return;
         long token = generation.incrementAndGet();
-        neural.speak(text, error -> {
-            if (error == null || token != generation.get()) return;
-            Log.w(TAG, "Neural voice unavailable; using Android TTS fallback", error);
-            speakFallback(text, token);
-        });
+        Log.w(TAG, "VERTEX_LIVE_AUDIO_NOT_CONNECTED; using Android TTS compatibility output");
+        speakFallback(text, token);
     }
 
     public void cancel() {
         generation.incrementAndGet();
-        neural.cancel();
         fallback.stop();
     }
 

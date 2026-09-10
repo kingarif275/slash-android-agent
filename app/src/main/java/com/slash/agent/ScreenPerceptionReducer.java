@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /** Produces compact, temporary, grounded observations instead of raw Accessibility dumps. */
 public final class ScreenPerceptionReducer {
-    private static final int MAX_ELEMENTS = 72;
+    private static final int MAX_ELEMENTS = 48;
     private static final AtomicLong IDS = new AtomicLong();
 
     public static final class Element {
@@ -80,11 +80,10 @@ public final class ScreenPerceptionReducer {
             for (Element element : elements) {
                 output.append(element.id).append(" ")
                         .append(role(element)).append(" text=").append(JSONObject.quote(label(element)))
-                        .append(" clickable=").append(element.clickable)
-                        .append(" editable=").append(element.editable)
-                        .append(" scrollable=").append(element.scrollable)
-                        .append(" bounds=").append(element.bounds.flattenToString());
-                if (!element.viewId.isEmpty()) output.append(" view_id=").append(JSONObject.quote(element.viewId));
+                        .append(" actions=")
+                        .append(element.clickable ? "click" : "-")
+                        .append(element.editable ? ",type" : "")
+                        .append(element.scrollable ? ",scroll" : "");
                 output.append('\n');
             }
             return output.toString().trim();
@@ -114,6 +113,14 @@ public final class ScreenPerceptionReducer {
         String text = value(node.getText());
         String description = value(node.getContentDescription());
         String viewId = value(node.getViewIdResourceName());
+        // Many Android settings rows expose clickability on a container while
+        // the human-readable title lives on a non-clickable child. Promote that
+        // visible descendant label onto the actionable row so planning remains
+        // semantic without leaking resource IDs.
+        if (node.isClickable() && text.isEmpty() && description.isEmpty()) {
+            String descendant = descendantLabel(node, 0);
+            if (!descendant.isEmpty()) text = descendant;
+        }
         boolean actionable = node.isClickable() || node.isEditable() || node.isScrollable();
         boolean labeled = !text.isEmpty() || !description.isEmpty() || !viewId.isEmpty();
         if (actionable || labeled) {
@@ -133,6 +140,21 @@ public final class ScreenPerceptionReducer {
             collect(child, path.isEmpty() ? Integer.toString(index) : path + "." + index,
                     output, depth + 1);
         }
+    }
+
+    private static String descendantLabel(AccessibilityNodeInfo node, int depth) {
+        if (node == null || depth > 4) return "";
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);
+            if (child == null) continue;
+            String text = value(child.getText());
+            if (!text.isEmpty()) return text;
+            String description = value(child.getContentDescription());
+            if (!description.isEmpty()) return description;
+            String nested = descendantLabel(child, depth + 1);
+            if (!nested.isEmpty()) return nested;
+        }
+        return "";
     }
 
     public static AccessibilityNodeInfo resolve(AccessibilityNodeInfo root, String path) {
@@ -161,8 +183,18 @@ public final class ScreenPerceptionReducer {
     private static String label(Element element) {
         if (!element.text.isEmpty()) return element.text;
         if (!element.description.isEmpty()) return element.description;
-        if (!element.viewId.isEmpty()) return element.viewId;
-        return element.className;
+        // Custom-rendered search controls often expose no text/content
+        // description, but Android still provides a semantic resource id such
+        // as `search_edit_text`. Convert that stable hint into a generic label
+        // so the planner/fallback can ground Search without app-specific code.
+        String id = element.viewId == null ? "" : element.viewId.toLowerCase(java.util.Locale.US);
+        if (id.contains("search") || id.contains("query") || id.contains("find")) {
+            return element.editable ? "Search field" : "Search";
+        }
+        // Resource IDs and class names are implementation metadata, not labels
+        // a planner can safely understand. Keep them on Element for grounding,
+        // but never present them as semantic text.
+        return "";
     }
 
     static String value(CharSequence value) { return value == null ? "" : value.toString().trim(); }

@@ -1,6 +1,7 @@
 package com.slash.agent;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -13,16 +14,19 @@ import java.nio.charset.StandardCharsets;
 public final class EmbeddedLlamaRuntime implements LlmRuntime {
     private static final String TAG = "SlashRuntime";
     private final LocalModelManager models;
+    private final SharedPreferences diagnostics;
     private volatile boolean loaded;
     private final boolean nativeAvailable;
     private volatile String lastMetrics = "{}";
 
     public EmbeddedLlamaRuntime(Context context) {
         models = new LocalModelManager(context);
+        diagnostics = context.getSharedPreferences("slash_runtime_diagnostics", Context.MODE_PRIVATE);
         boolean available;
         try {
             System.loadLibrary("slash_llama");
             available = true;
+            models.setModelProbe(this::nativeProbeModel);
             Log.i(TAG, "JNI_BRIDGE_READY");
         } catch (UnsatisfiedLinkError error) {
             available = false;
@@ -55,22 +59,31 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
                 + " bytes=" + models.modelFile().length() + " threads=" + threads);
         loaded = nativeLoad(models.modelFile().getAbsolutePath(), contextLength, 256, threads);
         if (loaded) {
+            long loadMs = android.os.SystemClock.elapsedRealtime() - startedAt;
+            diagnostics.edit().putLong("last_model_load_ms", loadMs)
+                    .putString("last_model_profile", profile.id)
+                    .putString("last_model_variant", profile.modelVariant.name())
+                    .putString("active_model_path", models.modelFile().getAbsolutePath()).apply();
             Log.i(TAG, "NATIVE_MODEL_LOAD_SUCCESS MODEL_TIER=" + profile.displayName
                     + " KV_CACHE_REUSE_ENABLED MODEL_KEEPALIVE=true load_ms="
-                    + (android.os.SystemClock.elapsedRealtime() - startedAt));
+                    + loadMs);
             callback.onComplete(null, null);
         } else callback.onComplete("Slash could not load the local GGUF model.", null);
     }
 
     @Override public void generate(JSONArray messages, Callback callback) {
-        run(messages, null, callback);
+        run(messages, 256, null, callback);
+    }
+
+    @Override public void generate(JSONArray messages, int maxTokens, Callback callback) {
+        run(messages, Math.max(16, Math.min(256, maxTokens)), null, callback);
     }
 
     @Override public void generateStreaming(JSONArray messages, StreamingCallback callback) {
-        run(messages, callback, null);
+        run(messages, 256, callback, null);
     }
 
-    private void run(JSONArray messages, StreamingCallback streaming, Callback buffered) {
+    private void run(JSONArray messages, int maxTokens, StreamingCallback streaming, Callback buffered) {
         if (!loaded) {
             if (streaming != null) streaming.onComplete("The local model is not loaded yet.", null);
             else buffered.onComplete("The local model is not loaded yet.", null);
@@ -82,8 +95,9 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
         Utf8PieceAssembler utf8 = new Utf8PieceAssembler();
         try {
             long startedAt = android.os.SystemClock.elapsedRealtime();
-            Log.i(TAG, "NATIVE_GENERATION_START prompt_chars=" + prompt.length() + " max_tokens=256");
-            nativeGenerateStreaming(prompt, 256, new NativeCallback() {
+            Log.i(TAG, "NATIVE_GENERATION_START prompt_chars=" + prompt.length()
+                    + " max_tokens=" + maxTokens);
+            nativeGenerateStreaming(prompt, maxTokens, new NativeCallback() {
                 @Override public void onToken(byte[] bytes) {
                     String piece = utf8.offer(bytes);
                     if (piece.isEmpty()) return;
@@ -94,6 +108,9 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
                 @Override public void onComplete(String metricsJson) {
                     raw.append(utf8.finish());
                     lastMetrics = metricsJson == null ? "{}" : metricsJson;
+                    diagnostics.edit().putString("last_generation_metrics", lastMetrics)
+                            .putLong("last_generation_elapsed_ms",
+                                    android.os.SystemClock.elapsedRealtime() - startedAt).apply();
                     Log.i(TAG, "NATIVE_GENERATION_SUCCESS elapsed_ms="
                             + (android.os.SystemClock.elapsedRealtime() - startedAt)
                             + " metrics=" + lastMetrics);
@@ -199,6 +216,7 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
             String trimmed = visible.trim();
             if (!safeText) {
                 if (raw.trim().startsWith("<think>") && !raw.contains("</think>")) return;
+                if (NativeToolCallParser.looksLikeStructuredToolPrefix(raw)) return;
                 if (trimmed.startsWith("<tool_call") || trimmed.startsWith("{")) return;
                 if (trimmed.startsWith("<") && trimmed.length() < 16) return;
                 safeText = !trimmed.isEmpty();
@@ -211,6 +229,7 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
     }
 
     private native boolean nativeLoad(String path, int contextLength, int batchSize, int threads);
+    private native boolean nativeProbeModel(String path);
     private native void nativeGenerateStreaming(String prompt, int maxTokens, NativeCallback callback);
     private native void nativeCancel();
     private native void nativeUnload();

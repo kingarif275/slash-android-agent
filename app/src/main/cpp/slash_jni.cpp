@@ -172,6 +172,31 @@ void call_error(JNIEnv * env, jobject callback, jmethodID method, const std::str
 }  // namespace
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_com_slash_agent_EmbeddedLlamaRuntime_nativeProbeModel(
+        JNIEnv * env, jobject, jstring path) {
+    std::lock_guard<std::mutex> lock(runtime_mutex);
+    bool initialized_here = false;
+    if (!backend_initialized) {
+        llama_backend_init();
+        backend_initialized = true;
+        initialized_here = true;
+    }
+    std::string model_path = from_java(env, path);
+    llama_model_params params = llama_model_default_params();
+    params.n_gpu_layers = 0;
+    llama_model * candidate = llama_model_load_from_file(model_path.c_str(), params);
+    bool success = candidate != nullptr;
+    if (candidate != nullptr) llama_model_free(candidate);
+    if (initialized_here) {
+        llama_backend_free();
+        backend_initialized = false;
+    }
+    log_info(std::string("NATIVE_MODEL_PROBE ") + (success ? "success" : "failed")
+             + " path=" + model_path);
+    return success ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_slash_agent_EmbeddedLlamaRuntime_nativeLoad(
         JNIEnv * env, jobject, jstring path, jint context_length, jint batch_size, jint threads) {
     std::lock_guard<std::mutex> lock(runtime_mutex);

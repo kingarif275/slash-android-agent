@@ -51,8 +51,9 @@ public final class SlashToolExecutor {
             String packageId = app.activityInfo.packageName;
             String label = compact(app.loadLabel(pm).toString());
             String packageName = compact(packageId);
-            int candidate = label.equals(wanted) ? 100 : label.contains(wanted) ? 80 : wanted.contains(label) ? 70 : 0;
+            int candidate = label.equals(wanted) ? 100 : label.contains(wanted) ? 80 : 0;
             if (candidate == 0 && !wanted.isEmpty() && packageName.contains(wanted)) candidate = 60;
+            if (candidate == 0) candidate = semanticLabelScore(query, app.loadLabel(pm).toString());
             if (candidate > score) { best = app; score = candidate; }
         }
         if (best == null) return new Result(false, "APP_NOT_FOUND: " + query);
@@ -67,6 +68,12 @@ public final class SlashToolExecutor {
         String observationId = args.optString("observation_id");
         String elementId = args.optString("element_id");
         boolean success = SlashAccessibilityService.clickElementSafe(observationId, elementId);
+        String label = args.optString("label").trim();
+        if (!success && !label.isEmpty()) {
+            // Re-ground by the current semantic label when the opaque element
+            // identity belongs to an older accessibility observation.
+            success = SlashAccessibilityService.clickElementSafe(observationId, label);
+        }
         String target = observationId + "/" + elementId;
         return new Result(success, success ? "CLICKED_ELEMENT: " + target : "ELEMENT_NOT_FOUND_OR_STALE: " + target);
     }
@@ -80,4 +87,17 @@ public final class SlashToolExecutor {
     }
 
     private String compact(String value) { return value.toLowerCase(Locale.US).replaceAll("[^a-z0-9]", ""); }
+
+    private int semanticLabelScore(String query, String label) {
+        String[] wanted = query.toLowerCase(Locale.US).split("[^a-z0-9]+");
+        String[] offered = label.toLowerCase(Locale.US).split("[^a-z0-9]+");
+        int score = 0;
+        for (String candidate : offered) for (String token : wanted) {
+            if (candidate.length() < 3 || !candidate.equals(token)) continue;
+            boolean genericPublisher = token.equals("google") || token.equals("microsoft")
+                    || token.equals("meta") || token.equals("samsung");
+            score += genericPublisher ? 8 : 35;
+        }
+        return score;
+    }
 }

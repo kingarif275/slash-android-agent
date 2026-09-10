@@ -11,6 +11,7 @@ public final class ToolArgumentNormalizer {
 
     public static String toolName(String raw) {
         String name = raw == null ? "" : raw.trim().toUpperCase(Locale.US);
+        if ("CALL_DELEGATE_TO_AGENT".equals(name)) return "DELEGATE_TO_AGENT";
         if ("GET_SCREEN_STATE".equals(name) || "READ_SCREEN".equals(name)) return "OBSERVE_SCREEN";
         return name;
     }
@@ -42,6 +43,13 @@ public final class ToolArgumentNormalizer {
             case "FINISH_TASK":
                 put(out, "summary", source, "summary", "result", "message");
                 break;
+            case "WEB_SEARCH":
+                put(out, "query", source, "query", "q", "search", "search_query");
+                break;
+            case "FETCH_URL":
+                put(out, "url", source, "url", "uri", "link");
+                break;
+            case "NETWORK_STATUS":
             case "OBSERVE_SCREEN":
             case "BACK":
             case "HOME":
@@ -76,6 +84,8 @@ public final class ToolArgumentNormalizer {
             }
         }
         if ("DELEGATE_TO_AGENT".equals(tool) && blank(args.optString("goal"))) return "DELEGATE_TO_AGENT requires goal";
+        if ("WEB_SEARCH".equals(tool) && blank(args.optString("query"))) return "WEB_SEARCH requires query";
+        if ("FETCH_URL".equals(tool) && blank(args.optString("url"))) return "FETCH_URL requires url";
         return null;
     }
 

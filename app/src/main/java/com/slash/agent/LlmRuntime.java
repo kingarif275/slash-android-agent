@@ -11,6 +11,9 @@ public interface LlmRuntime {
     }
     void loadModel(Callback callback);
     void generate(JSONArray messages, Callback callback);
+    default void generate(JSONArray messages, int maxTokens, Callback callback) {
+        generate(messages, callback);
+    }
     default void generateStreaming(JSONArray messages, StreamingCallback callback) {
         generate(messages, (text, toolCall) -> {
             if (toolCall == null && text != null && !text.isEmpty()) callback.onDelta(text);

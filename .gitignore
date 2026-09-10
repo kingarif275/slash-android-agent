@@ -8,3 +8,7 @@ local.properties
 *.iml
 captures/
 *.apk
+.tmp-*.png
+qa-*.png
+*.backup
+.codex-remote-attachments/
