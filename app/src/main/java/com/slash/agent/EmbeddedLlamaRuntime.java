@@ -80,7 +80,10 @@ public final class EmbeddedLlamaRuntime implements LlmRuntime {
     }
 
     @Override public void generateStreaming(JSONArray messages, StreamingCallback callback) {
-        run(messages, 256, callback, null);
+        // Qwen3 can spend the first part of a short generation in its private
+        // reasoning block. 256 tokens occasionally ends before visible text or
+        // a tool call is emitted, especially on the High profile.
+        run(messages, 512, callback, null);
     }
 
     private void run(JSONArray messages, int maxTokens, StreamingCallback streaming, Callback buffered) {
