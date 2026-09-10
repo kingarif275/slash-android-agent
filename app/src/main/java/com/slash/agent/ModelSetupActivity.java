@@ -15,6 +15,7 @@ import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.text.InputType;
 
@@ -39,9 +40,7 @@ public final class ModelSetupActivity extends Activity {
     private Button cloudUse;
     private Button conversationModelChoice;
     private Button agentModelChoice;
-    private RadioGroup runtimeChoices;
-    private RadioButton localRuntimeOption;
-    private RadioButton cloudRuntimeOption;
+    private Switch runtimeSwitch;
     private boolean refreshingRuntimeChoice;
     private TextView voiceStatus;
     private Button voiceDownload;
@@ -66,17 +65,19 @@ public final class ModelSetupActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(24), dp(28), dp(24), dp(24));
-        root.setBackgroundColor(Color.WHITE);
+        root.setBackgroundColor(Color.rgb(246, 246, 246));
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
             view.setPadding(dp(24) + bars.left, dp(28) + bars.top, dp(24) + bars.right, dp(24) + bars.bottom);
             return insets;
         });
 
-        TextView back = label("‹  Chats", 16, Color.rgb(13, 13, 13));
+        TextView back = label("‹  CHATS", 13, Color.rgb(70, 70, 70));
         back.setOnClickListener(view -> finish());
         root.addView(back);
-        root.addView(label("Local model", 28, Color.rgb(13, 13, 13)));
+        TextView title = label("AI CONTROL", 28, Color.rgb(13, 13, 13));
+        title.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        root.addView(title);
         root.addView(label("Models stay in Slash's private storage. Choose a profile that fits this phone before downloading.", 16, Color.rgb(92, 92, 92)));
 
         RadioGroup choices = new RadioGroup(this);
@@ -131,39 +132,25 @@ public final class ModelSetupActivity extends Activity {
         root.addView(agentModelChoice);
         cloudStatus = label("", 14, Color.rgb(92, 92, 92));
         root.addView(cloudStatus);
-        runtimeChoices = new RadioGroup(this);
-        runtimeChoices.setOrientation(RadioGroup.VERTICAL);
-        localRuntimeOption = new RadioButton(this);
-        localRuntimeOption.setId(View.generateViewId());
-        localRuntimeOption.setText("Local — selected abliterated Qwen3\nPrivate and works offline");
-        localRuntimeOption.setTextSize(15);
-        localRuntimeOption.setTypeface(inter);
-        localRuntimeOption.setPadding(0, dp(6), 0, dp(6));
-        cloudRuntimeOption = new RadioButton(this);
-        cloudRuntimeOption.setId(View.generateViewId());
-        cloudRuntimeOption.setText("Cloud — Vertex AI Gemini\nFlash-Lite conversation · Flash agent");
-        cloudRuntimeOption.setTextSize(15);
-        cloudRuntimeOption.setTypeface(inter);
-        cloudRuntimeOption.setPadding(0, dp(6), 0, dp(6));
-        runtimeChoices.addView(localRuntimeOption);
-        runtimeChoices.addView(cloudRuntimeOption);
-        runtimeChoices.setOnCheckedChangeListener((group, checkedId) -> {
+        runtimeSwitch = new Switch(this);
+        runtimeSwitch.setText("USE VERTEX AI\nTurn off to use the installed local model");
+        runtimeSwitch.setTextSize(15);
+        runtimeSwitch.setTypeface(inter);
+        runtimeSwitch.setPadding(dp(16), dp(12), dp(12), dp(12));
+        runtimeSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (refreshingRuntimeChoice) return;
-            if (checkedId == localRuntimeOption.getId()) {
-                coordinator.activateLocalRuntime(this::refreshCloudSelection);
-                return;
-            }
-            if (checkedId != cloudRuntimeOption.getId()) return;
-            if (!coordinator.cloudAiSettings().hasApiKey()) {
-                cloudStatus.setText("Save a Vertex AI Express Mode API key below first.");
+            if (checked && !coordinator.cloudAiSettings().hasApiKey()) {
+                cloudStatus.setText("Vertex AI is not configured yet. Save an AQ. key below first.");
                 refreshingRuntimeChoice = true;
-                runtimeChoices.check(localRuntimeOption.getId());
+                runtimeSwitch.setChecked(false);
                 refreshingRuntimeChoice = false;
                 return;
             }
-            coordinator.activateSavedCloudRuntime(this::refreshCloudSelection);
+            if (checked) coordinator.activateSavedCloudRuntime(this::refreshCloudSelection);
+            else coordinator.activateLocalRuntime(this::refreshCloudSelection);
         });
-        root.addView(runtimeChoices);
+        root.addView(runtimeSwitch, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(72)));
         cloudKey = new EditText(this);
         cloudKey.setHint("Vertex AI Express Mode API key (AQ.…)");
         cloudKey.setSingleLine(true);
@@ -364,10 +351,9 @@ public final class ModelSetupActivity extends Activity {
                 + "\nAgent Mode: " + coordinator.cloudAiSettings().agentModel()
                 + "\nKey: " + (configured ? "saved with Android Keystore" : "not saved")
                 + "\nActive runtime: " + (active ? "Vertex AI Gemini" : "local abliterated Qwen3"));
-        if (runtimeChoices != null) {
+        if (runtimeSwitch != null) {
             refreshingRuntimeChoice = true;
-            runtimeChoices.check(active
-                    ? cloudRuntimeOption.getId() : localRuntimeOption.getId());
+            runtimeSwitch.setChecked(active);
             refreshingRuntimeChoice = false;
         }
     }
