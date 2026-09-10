@@ -1298,6 +1298,12 @@ public final class AgentTaskController {
         query = query.replaceFirst("(?i)^(a|an|any|the)\\s+", "");
         query = query.replaceFirst("(?i)\\s+on\\s+(youtube music|youtube|spotify|apple music)$", "").trim();
         query = query.replaceFirst("(?i)\\s+video$", "").trim();
+        // Search providers need both pieces of an explicit title/artist request.
+        // Keep the title first so the strongest result is still the requested
+        // song, while retaining the artist as a disambiguator.
+        java.util.regex.Matcher by = java.util.regex.Pattern.compile(
+                "(?i)^(.+?)\\s+by\\s+(.+)$").matcher(query);
+        if (by.matches()) query = by.group(1).trim() + " " + by.group(2).trim();
         return query;
     }
 
