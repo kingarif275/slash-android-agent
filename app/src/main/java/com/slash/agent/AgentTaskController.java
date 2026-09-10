@@ -642,6 +642,31 @@ public final class AgentTaskController {
                 }
             }
         }
+        // AGI-style handoff for compound media commands: opening the provider is
+        // only a transport step. Give Android one short post-launch settling
+        // window, then immediately observe and hand the PLAY_CONTENT objective to
+        // the grounded semantic path. Do not spend a remote planner round asking
+        // whether to reopen the provider.
+        if (result.success && "OPEN_APP".equals(tool)
+                && state.goal != null
+                && state.goal.intent == AgentGoal.Intent.PLAY_MEDIA) {
+            scheduler.execute(() -> {
+                SlashAccessibilityService.awaitStableUi(uiEventToken, 600);
+                if (!host.isCurrent(token)) return;
+                state.world = AgentWorldState.capture(appContext);
+                commitObservedOpenObjective(state, state.world.foregroundPackage());
+                JSONObject mediaAction = semanticMediaFallback(state);
+                if (mediaAction != null) {
+                    host.diagnostic("PLANNER_FALLBACK reason=media_post_open_handoff");
+                    SafeAgentLog.event("PLANNER_FALLBACK", "reason=media_post_open_handoff tool="
+                            + mediaAction.optString("tool"));
+                    execute(chatId, context, state, mediaAction, token);
+                } else {
+                    requestNext(chatId, context, state, token);
+                }
+            });
+            return;
+        }
         if (result.success && "HOME".equals(tool)) {
             String nextAfterHome = nextUnopenedApp(state);
             if (!nextAfterHome.isEmpty()) {
