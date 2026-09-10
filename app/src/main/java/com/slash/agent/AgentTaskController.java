@@ -1753,7 +1753,27 @@ public final class AgentTaskController {
         String wanted = appQuery.toLowerCase(Locale.US)
                 .replaceAll("(?i)\\b(app|application)\\b", "")
                 .replaceAll("[^a-z0-9]", "");
-        return !foreground.isEmpty() && !wanted.isEmpty() && foreground.contains(wanted);
+        if (foreground.isEmpty() || wanted.isEmpty()) return false;
+        if (foreground.contains(wanted)) return true;
+        // Android package names frequently do not contain the user-facing app
+        // name verbatim (Spotify is com.spotify.music, YouTube is
+        // com.google.android.youtube). Keep this generic and deterministic so
+        // an OPEN_APP objective can commit and hand control to the next
+        // objective instead of asking the model to reopen the same app.
+        String[] aliases;
+        switch (wanted) {
+            case "spotify": aliases = new String[]{"comspotifymusic", "spotifymusic"}; break;
+            case "youtube": aliases = new String[]{"comgoogleandroidyoutube", "youtubemusic"}; break;
+            case "youtubemusic": aliases = new String[]{"comgoogleandroidyoutube", "youtubemusic"}; break;
+            case "whatsapp": aliases = new String[]{"comwhatsapp"}; break;
+            case "telegram": aliases = new String[]{"orgtelegrammessenger"}; break;
+            case "discord": aliases = new String[]{"comdiscord"}; break;
+            case "chrome": aliases = new String[]{"comandroidchrome"}; break;
+            case "gmail": aliases = new String[]{"comgoogleandroidgm"}; break;
+            default: aliases = new String[0];
+        }
+        for (String alias : aliases) if (foreground.contains(alias)) return true;
+        return false;
     }
 
     private String currentObjectiveSummary(TaskState state) {
