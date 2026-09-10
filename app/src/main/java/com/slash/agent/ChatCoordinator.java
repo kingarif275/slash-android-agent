@@ -265,6 +265,14 @@ public final class ChatCoordinator implements AgentTaskController.Host {
         SlashRuntimeService.updateStatus("Writing a reply");
         JSONArray context = companionContext(chatId, userText);
         if (agent.handleConversationCommand(chatId, userText, context, token)) return;
+        // Clear phone-control outcomes should not depend on the conversation
+        // model first emitting a DELEGATE_TO_AGENT tool call. That made the
+        // same request behave differently between Vertex and local models.
+        // Route unambiguous action language directly into the grounded agent.
+        if (looksLikeDirectAgentRequest(userText)) {
+            agent.start(chatId, userText, context, null, token);
+            return;
+        }
         runtime.generateStreaming(context, new LlmRuntime.StreamingCallback() {
             final StringBuilder visible = new StringBuilder();
             long messageId = -1;
@@ -307,6 +315,15 @@ public final class ChatCoordinator implements AgentTaskController.Host {
                 speakIfVoice(token, reply);
             }
         });
+    }
+
+    private boolean looksLikeDirectAgentRequest(String text) {
+        if (text == null) return false;
+        String value = text.trim().toLowerCase(Locale.US);
+        if (value.isEmpty()) return false;
+        boolean action = value.matches("(?s).*(^|\\b)(open|launch|start|play|search|find|go home|press back|click|tap|type|write|send|calculate|enable|disable)(\\b|$).*");
+        boolean target = value.matches("(?s).*(spotify|youtube|youtube music|apple music|settings|notes|calculator|gmail|whatsapp|discord|browser|chrome|display|battery).*");
+        return action && (target || value.contains(" on ") || value.contains(" in "));
     }
 
     private JSONArray companionContext(String chatId, String query) {
