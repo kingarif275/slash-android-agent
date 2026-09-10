@@ -1301,15 +1301,12 @@ public final class AgentTaskController {
                                 .put("element_id", bestId).put("label", bestLabel));
             } catch (Exception ignored) { return null; }
         }
-        // A media app may restore an existing watch/player screen when launched.
-        // Return once to its root surface and re-observe; this is a generic state
-        // recovery step, not an app-specific workflow.
-        if (!state.mediaBackAttempted) {
-            state.mediaBackAttempted = true;
-            try {
-                return new JSONObject().put("tool", "BACK").put("arguments", new JSONObject());
-            } catch (Exception ignored) { return null; }
-        }
+        // Do not press BACK speculatively here. A freshly launched provider can
+        // expose an unlabeled/icon-only root for one accessibility frame; BACK
+        // at that point exits the provider and makes the task look as if it
+        // "opened Spotify and disappeared". Let the planner/vision path inspect
+        // the stable surface instead. BACK remains available as an explicitly
+        // grounded recovery action when the model can identify a blocking page.
         return null;
     }
 
