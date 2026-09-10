@@ -65,7 +65,7 @@ public final class ModelSetupActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(24), dp(28), dp(24), dp(24));
-        root.setBackgroundColor(Color.rgb(246, 246, 246));
+        root.setBackgroundColor(Color.WHITE);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
             view.setPadding(dp(24) + bars.left, dp(28) + bars.top, dp(24) + bars.right, dp(24) + bars.bottom);
@@ -91,6 +91,7 @@ public final class ModelSetupActivity extends Activity {
             option.setTextSize(15);
             option.setTypeface(inter);
             option.setTextColor(Color.rgb(13, 13, 13));
+            option.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(13, 13, 13)));
             option.setPadding(0, dp(8), 0, dp(8));
             choices.addView(option, new RadioGroup.LayoutParams(RadioGroup.LayoutParams.MATCH_PARENT, RadioGroup.LayoutParams.WRAP_CONTENT));
             profileOptions.put(profile.id, option);
@@ -109,6 +110,7 @@ public final class ModelSetupActivity extends Activity {
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         progress.setMax(1000);
         download = new Button(this);
+        styleControl(download);
         download.setAllCaps(false);
         download.setOnClickListener(view -> handleModelAction());
         root.addView(selected);
@@ -136,6 +138,7 @@ public final class ModelSetupActivity extends Activity {
         runtimeSwitch.setText("USE VERTEX AI\nTurn off to use the installed local model");
         runtimeSwitch.setTextSize(15);
         runtimeSwitch.setTypeface(inter);
+        runtimeSwitch.setTextColor(Color.rgb(13, 13, 13));
         runtimeSwitch.setPadding(dp(16), dp(12), dp(12), dp(12));
         runtimeSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (refreshingRuntimeChoice) return;
@@ -156,12 +159,16 @@ public final class ModelSetupActivity extends Activity {
         cloudKey.setSingleLine(true);
         cloudKey.setTextSize(15);
         cloudKey.setTypeface(inter);
+        cloudKey.setTextColor(Color.rgb(13, 13, 13));
+        cloudKey.setHintTextColor(Color.rgb(110, 110, 110));
+        cloudKey.setBackgroundColor(Color.WHITE);
         cloudKey.setInputType(InputType.TYPE_CLASS_TEXT
                 | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         cloudKey.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         root.addView(cloudKey, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(56)));
         cloudUse = new Button(this);
+        styleControl(cloudUse);
         cloudUse.setAllCaps(false);
         cloudUse.setText("Save key and use Vertex AI Gemini");
         cloudUse.setOnClickListener(view -> activateCloud());
@@ -170,6 +177,7 @@ public final class ModelSetupActivity extends Activity {
         cloudButtonParams.topMargin = dp(10);
         root.addView(cloudUse, cloudButtonParams);
         Button clearCloud = new Button(this);
+        styleControl(clearCloud);
         clearCloud.setAllCaps(false);
         clearCloud.setText("Remove saved Vertex AI key");
         clearCloud.setOnClickListener(view -> coordinator.clearCloudApiKey(() -> {
@@ -186,6 +194,7 @@ public final class ModelSetupActivity extends Activity {
         root.addView(agentHeading);
         root.addView(label("For playback goals, Slash verifies the actual Android MediaSession state and metadata instead of trusting the AI or the visible screen. Enable Slash media verification under Notification access.", 15, Color.rgb(92, 92, 92)));
         Button mediaAccess = new Button(this);
+        styleControl(mediaAccess);
         mediaAccess.setAllCaps(false);
         mediaAccess.setText("Open Notification access settings");
         mediaAccess.setOnClickListener(view -> startActivity(
@@ -202,11 +211,13 @@ public final class ModelSetupActivity extends Activity {
         voiceStatus = label("", 14, Color.rgb(92, 92, 92));
         root.addView(voiceStatus);
         voiceDownload = new Button(this);
+        styleControl(voiceDownload);
         voiceDownload.setAllCaps(false);
         voiceDownload.setText("Download neural voice model");
         voiceDownload.setOnClickListener(view -> downloadVoiceModel());
         root.addView(voiceDownload, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(52)));
         Button importVoice = new Button(this);
+        styleControl(importVoice);
         importVoice.setAllCaps(false);
         importVoice.setText("Choose speaker-reference WAV");
         importVoice.setOnClickListener(view -> chooseSpeakerReference());
@@ -222,6 +233,7 @@ public final class ModelSetupActivity extends Activity {
 
     private Button modelSpinner(String[] models, String selectedModel) {
         Button button = new Button(this);
+        styleControl(button);
         button.setAllCaps(false);
         button.setText(selectedModel + "  ▾");
         button.setTextSize(15);
@@ -412,6 +424,16 @@ public final class ModelSetupActivity extends Activity {
         view.setLineSpacing(dp(3), 1f);
         view.setPadding(0, 0, 0, dp(18));
         return view;
+    }
+
+    /** Keep native Material widgets from inheriting the dark theme's white labels. */
+    private void styleControl(Button button) {
+        button.setAllCaps(false);
+        button.setTextColor(Color.rgb(13, 13, 13));
+        button.setTypeface(inter);
+        button.setTextSize(15);
+        button.setBackgroundColor(Color.WHITE);
+        button.setPadding(dp(12), 0, dp(12), 0);
     }
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
