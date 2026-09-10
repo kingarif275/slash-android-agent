@@ -142,6 +142,13 @@ public final class ModelSetupActivity extends Activity {
         runtimeSwitch.setPadding(dp(16), dp(12), dp(12), dp(12));
         runtimeSwitch.setOnCheckedChangeListener((button, checked) -> {
             if (refreshingRuntimeChoice) return;
+            if (!checked && !models.exists()) {
+                cloudStatus.setText("Local AI is selected, but the selected GGUF model is not installed. Download it in the Local model section first.");
+                refreshingRuntimeChoice = true;
+                runtimeSwitch.setChecked(true);
+                refreshingRuntimeChoice = false;
+                return;
+            }
             if (checked && !coordinator.cloudAiSettings().hasApiKey()) {
                 cloudStatus.setText("Vertex AI is not configured yet. Save an AQ. key below first.");
                 refreshingRuntimeChoice = true;
@@ -362,7 +369,8 @@ public final class ModelSetupActivity extends Activity {
         cloudStatus.setText("Conversation: " + coordinator.cloudAiSettings().conversationModel()
                 + "\nAgent Mode: " + coordinator.cloudAiSettings().agentModel()
                 + "\nKey: " + (configured ? "saved with Android Keystore" : "not saved")
-                + "\nActive runtime: " + (active ? "Vertex AI Gemini" : "local abliterated Qwen3"));
+                + "\nActive runtime: " + (active ? "Vertex AI Gemini" : "local abliterated Qwen3")
+                + "\nLocal model: " + (models.exists() ? "installed and ready" : "not installed"));
         if (runtimeSwitch != null) {
             refreshingRuntimeChoice = true;
             runtimeSwitch.setChecked(active);
