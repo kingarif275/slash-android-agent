@@ -90,6 +90,18 @@ The selected `ModelProfile` records architecture, context length, chat template,
 
 The official llama.cpp repository is pinned as a Git submodule under `app/src/main/cpp/llama.cpp`. CMake builds `libslash_llama.so` for arm64-v8a. The JNI bridge loads GGUF models, chunks prompt prefill to `n_batch`, streams raw UTF-8 token bytes, supports cancellation, and reuses the longest valid KV/prefix cache across turns. It logs prompt totals, prefix matches, reused/new tokens, and prefill timing.
 
+### Local acceleration status
+
+The current APK uses llama.cpp's ARM KleidiAI/NEON kernels as the verified local backend. This is an optimized CPU path and remains the compatibility fallback for all arm64 devices; it is not reported as GPU or NPU acceleration.
+
+The pinned llama.cpp revision also contains experimental Qualcomm backends:
+
+- Adreno GPU through OpenCL, which requires the Android OpenCL headers and ICD loader/runtime.
+- Vulkan GPU, which requires the Vulkan shader compiler and SPIR-V toolchain at build time.
+- Hexagon/HTP NPU, which requires Qualcomm Hexagon SDK Community Edition, signed HTP skeleton libraries, and a compatible device runtime.
+
+Those optional dependencies are not bundled in this repository or APK. Slash therefore does not claim `GPU` or `NPU` in diagnostics until a backend is compiled, initialized, and proven on-device. When accelerator packaging is added, backend logs must include the selected device, accelerated layer count, CPU layer count, and inference timings before the backend is exposed as active.
+
 ## Neural voice
 
 Voice turns use `ChatterboxNanoVoiceRuntime` when its separately downloaded model and speaker reference are ready. It runs the published four-graph ONNX pipeline (embedding, reference encoder, autoregressive language model with a 12-layer KV cache, and conditional decoder), then plays 24 kHz mono PCM. The local-model screen verifies every artifact against its published SHA-256 and imports a private 16-bit PCM WAV speaker reference. Android `TextToSpeech` is used only if neural synthesis fails. Typed turns remain text-only.
