@@ -1,6 +1,21 @@
 # Slash Android Agent
 
-Slash is a local-first Android chat app with phone-control tools inside the conversation. Launching the app opens a persistent chat; typed and spoken messages share the same downstream pipeline. Normal conversation stays on the compact companion path, while tool calls enter a bounded observe/act/verify loop and return a human-readable result to the same chat.
+Slash is a local-first, chat-first Android agent for controlling supported Android devices through natural language. It combines normal conversation, Vertex AI or local-model switching, accessibility-grounded actions, semantic screen understanding, multi-step objectives, recovery, and independent outcome verification.
+
+The original development target was a Nothing Phone (2), but Slash is not Nothing-exclusive. The same Android application is designed to run on other compatible arm64 Android phones and tablets. Device-specific behavior is handled through Android APIs, AccessibilityService, and runtime capability checks rather than a Nothing OS-only integration.
+
+## Device support
+
+The current debug/release configuration supports:
+
+- Android 12 (API 31) and newer (`minSdk 31`).
+- 64-bit ARM devices (`arm64-v8a`).
+- Phones and tablets with a working Android AccessibilityService implementation.
+- Devices with sufficient free storage and memory for the selected local model; the setup screen checks these requirements before activation.
+- Android 13 and newer for notification-based progress, after notification permission is granted.
+- Android 16 and newer for the promoted live task update/status pill. Older Android versions retain the regular foreground-service notification and in-app progress UI.
+
+Slash is not currently built for `armeabi-v7a`, x86, or x86_64 because the native llama.cpp runtime is packaged only for `arm64-v8a`. OEMs may expose different accessibility trees, background-service restrictions, permission flows, or performance characteristics, so device compatibility should be validated with a connected-device smoke test.
 
 ## Current architecture
 
@@ -16,7 +31,7 @@ MainActivity composer (TEXT or VOICE)
   -> SQLite chats, messages, progress, and local memory
 ```
 
-The application-scoped coordinator owns the warmed `EmbeddedLlamaRuntime`. `SlashRuntimeService` keeps user-initiated inference and an active agent task alive when the target app covers the chat Activity. A new text or voice turn invalidates an older task token and steers the conversation from current state.
+The application-scoped coordinator owns the warmed `EmbeddedLlamaRuntime`. `SlashRuntimeService` keeps user-initiated inference and an active agent task alive when the target app covers the chat Activity. A new text or voice turn invalidates an older task token and steers the conversation from current state. The runtime is provider-agnostic: a compatible device can use local GGUF inference, Vertex AI, or the configured cloud/local combination.
 
 The Quick Settings tile is optional. It opens the same chat composer in voice-input state; chat, agent work, history, memory, and screen control do not depend on it.
 
@@ -92,7 +107,7 @@ The official llama.cpp repository is pinned as a Git submodule under `app/src/ma
 
 ### Local acceleration status
 
-The current APK uses llama.cpp's ARM KleidiAI/NEON kernels as the verified local backend. This is an optimized CPU path and remains the compatibility fallback for all arm64 devices; it is not reported as GPU or NPU acceleration.
+The current portable APK uses llama.cpp's ARM KleidiAI/NEON kernels as the verified local backend. This is an optimized CPU path and remains the compatibility fallback for all supported arm64 devices; it is not reported as GPU or NPU acceleration unless a device-specific backend is compiled, initialized, and proven in runtime logs.
 
 The pinned llama.cpp revision also contains experimental Qualcomm backends:
 
